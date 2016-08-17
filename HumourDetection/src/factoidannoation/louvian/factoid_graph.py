@@ -74,7 +74,7 @@ class LexicalSimilarityGraph:
             
             #Normalize vector length for easier cosine similarity later
             vectorLength = 0
-            for value in wordVectors[word].itervalues():
+            for value in wordVectors[word].values():
                 vectorLength = vectorLength + value**2
             vectorLength = sqrt(vectorLength)
             for key in wordVectors[word]:
@@ -82,7 +82,7 @@ class LexicalSimilarityGraph:
                 
         
         #create graph
-        words = wordVectors.keys()
+        words = list(wordVectors.keys())
         self.graph = Graph.Full(len(words)) #create a fully connected graph with as many vertices as words in the lexicon
         #Adding the edges individually causes the graph to be reindexed for each edge.
         #Creating all the edges at once is significantly faster
@@ -90,7 +90,7 @@ class LexicalSimilarityGraph:
         self.graph.es["weight"] = None #make graph weighted
         
         for i in range(0, len(words)-1):
-            print "{}/{}".format (i, len(words)-2)
+            print("{}/{}".format (i, len(words)-2))
             wordVecI = wordVectors[words[i]]
             
             for j in range(i+1, len(words)):
@@ -103,20 +103,24 @@ class LexicalSimilarityGraph:
 if __name__ == "__main__":
 #     client = MongoClient()
 #     gentlerSongs = client.tweets.GentlerSongs.find()
-#     
+#       
 #     texts = []
 #     for tweet in gentlerSongs:
 #         text = tweet["text"]
 #         text = re.sub("@midnight", "", text, flags=re.I)
 #         text = re.sub("#GentlerSongs", "", text, flags=re.I)
 #         texts.append(text)
-#     
+#       
 #     lsg = LexicalSimilarityGraph(texts)
+#     try:
+#         lsg.graph.write("gentlersongs.graphml", "graphml")
+#     except:
+#         print("GraphML error")
+#     lsg.graph.write("gentlersongs.pickle", "pickle")
+    
+    test = 5
+    print(test)
+    pass
     graph = Graph.Read("gentlersongs.pickle", "pickle")
     communities = graph.community_multilevel(weights="weight")
-    plot(communities, "communities.png")
-    
-    
-#     lsg.graph.write("gentlersongs.graphml", "graphml")
-#     lsg.graph.write("gentlersongs.pickle", "pickle")
-        
+    pass       
