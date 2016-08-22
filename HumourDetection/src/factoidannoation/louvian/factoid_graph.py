@@ -6,15 +6,18 @@ Created on 18 Jul 2016
 from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk.tag import pos_tag
 from nltk.util import pad_sequence, trigrams
+from nltk.stem import WordNetLemmatizer
 from pymongo import MongoClient
 from math import sqrt
-from igraph import *
+import igraph
 import re
+from util.treebank_to_wordnet import get_wordnet_pos
 
 LEFT_PAD_SYMBOL = (u"<s>", u"<s>")
 RIGHT_PAD_SYMBOL = (u"</s>", u"</s>")
 POS_PREFIX = u"POS_"
 TRIGRAM_PREFIX = u"TRIGRAM_"
+ALPHANUM_PAT = re.compile(r"\W+")
 
 class LexicalSimilarityGraph:
     '''
@@ -33,6 +36,7 @@ class LexicalSimilarityGraph:
         Features are extracted and cosine similarities are used as edge weights
         '''
         
+        wnl = WordNetLemmatizer()
         wordVectors = {}
         
         #Process context and context POS features
@@ -40,16 +44,23 @@ class LexicalSimilarityGraph:
             sentences = sent_tokenize(text)
             for sentence in sentences:
                 words = word_tokenize(sentence)
-                wordsAndPOS = pos_tag(words) 
+                wordsAndPOS = pos_tag(words)
+                wordsAndPOSNoPunc = []
+                for word, pos in wordsAndPOS:
+                    wordNoPunc = ALPHANUM_PAT.sub("", word)
+                    if len(wordNoPunc) > 0:
+                        wordLemma = wnl.lemmatize(wordNoPunc, pos=get_wordnet_pos(pos))
+                        wordsAndPOSNoPunc.append((wordLemma.lower(), pos))
+                wordsAndPOS = wordsAndPOSNoPunc
+                
                 
                 #pad left and right. We use a 5 word window, meaning we need n=3 since the farthest distance is 3 words (inclusive)
                 #convertion to list to allow access by index
                 wordsAndPOS = list(pad_sequence(wordsAndPOS, 3, pad_left=True, pad_right=True, left_pad_symbol=LEFT_PAD_SYMBOL, right_pad_symbol=RIGHT_PAD_SYMBOL))
                 
                 
-                for i in range(2, len(words) - 2): #to avoid processing <s> and </s> padding
+                for i in range(2, len(wordsAndPOS) - 2): #to avoid processing <s> and </s> padding
                     word, pos = wordsAndPOS[i]
-                    word = word.lower() #convert word to lowercase
                     pos = u"{}{}".format(POS_PREFIX, pos) #escape POS tags to avoid confusion with words
                     
                     if word not in wordVectors: #if the word hasn't been initialize
@@ -59,7 +70,6 @@ class LexicalSimilarityGraph:
                     
                     for offset in [-2, -1, 1, 2]: #5 word window, we don't care about the word itself (offset 0)
                         windowWord, windowPOS = wordsAndPOS[i + offset]
-                        windowWord = windowWord.lower()
                         windowPOS = u"{}{}".format(POS_PREFIX, windowPOS)
                         
                         wordVec[windowWord] = wordVec.get(windowWord, 0) + 1 #using get() avoids KeyError
@@ -74,7 +84,7 @@ class LexicalSimilarityGraph:
             
             #Normalize vector length for easier cosine similarity later
             vectorLength = 0
-            for value in wordVectors[word].values():
+            for value in wordVectors[word].itervalues():
                 vectorLength = vectorLength + value**2
             vectorLength = sqrt(vectorLength)
             for key in wordVectors[word]:
@@ -82,45 +92,61 @@ class LexicalSimilarityGraph:
                 
         
         #create graph
-        words = list(wordVectors.keys())
-        self.graph = Graph.Full(len(words)) #create a fully connected graph with as many vertices as words in the lexicon
+        print "vectors calculated"
+        words = wordVectors.keys()
+        self.graph = igraph.Graph.Full(len(words)) #create a fully connected graph with as many vertices as words in the lexicon
         #Adding the edges individually causes the graph to be reindexed for each edge.
         #Creating all the edges at once is significantly faster
         self.graph.vs["name"] = words #set the names of the vertices to the words in the lexicon
+#         self.graph.vs["label"] = words #set the labels for the graph accordingly
         self.graph.es["weight"] = None #make graph weighted
+        toRemove = [] #the edges which will be removed
         
         for i in range(0, len(words)-1):
-            print("{}/{}".format (i, len(words)-2))
+            print "{}/{}".format (i, len(words)-2)
             wordVecI = wordVectors[words[i]]
             
             for j in range(i+1, len(words)):
                 wordVecJ = wordVectors[words[j]]
                 
                 cosineSim = sum(wordVecI[k] * wordVecJ.get(k, 0) for k in wordVecI)
-                self.graph[words[i], words[j]] = cosineSim #assign weight
-                
+                if cosineSim == 0.0: #there is no similarity between the two
+                    toRemove.append((i, j)) #add the index pair to the list of edges to be removed (cuts down on reindexing time)
+                else:
+                    self.graph[words[i], words[j]] = cosineSim #assign weight
+        
+        print "removing edges"
+        self.graph.delete_edges(toRemove)
+        print "done"
                     
 if __name__ == "__main__":
-#     client = MongoClient()
-#     gentlerSongs = client.tweets.GentlerSongs.find()
-#       
-#     texts = []
-#     for tweet in gentlerSongs:
-#         text = tweet["text"]
+    client = MongoClient()
+    gentlerSongs = client.tweets.GentlerSongs.find()
+     
+    texts = []
+    for tweet in gentlerSongs:
+        text = tweet["text"]
 #         text = re.sub("@midnight", "", text, flags=re.I)
+        text = re.sub(r"@\S*", "", text, flags=re.I)
 #         text = re.sub("#GentlerSongs", "", text, flags=re.I)
-#         texts.append(text)
-#       
-#     lsg = LexicalSimilarityGraph(texts)
-#     try:
-#         lsg.graph.write("gentlersongs.graphml", "graphml")
-#     except:
-#         print("GraphML error")
-#     lsg.graph.write("gentlersongs.pickle", "pickle")
+        text = re.sub(r"#\S*", "", text, flags=re.I)
+        texts.append(text)
+     
+    lsg = LexicalSimilarityGraph(texts)
+    lsg.graph.write("gentlersongs.Lemma.27.pickle", "pickle")
+#     graph = igraph.Graph.Read("gentlersongs.pickle", "pickle")
+    print "pickle written"
+    communities = lsg.graph.community_multilevel(weights="weight")
+    print "clustering done"
+    subgraphs = communities.subgraphs()
+    with open("clusters.Lemma.27.txt", "w") as f:
+        for i in range(len(subgraphs)):
+            f.write(u"Cluster {}\n\n".format(i).encode("utf-8"))
+            for n in subgraphs[i].vs["name"]:
+                f.write(u"{}\n".format(n).encode("utf-8"))
+            f.write(u"\n\n\n\n\n".encode("utf-8"))
+    print "clusters written"
     
-    test = 5
-    print(test)
-    pass
-    graph = Graph.Read("gentlersongs.pickle", "pickle")
-    communities = graph.community_multilevel(weights="weight")
-    pass       
+#     lsg.graph.write("gentlersongs.graphml", "graphml")
+#     lsg.graph.write("gentlersongs.pickle", "pickle")
+        
