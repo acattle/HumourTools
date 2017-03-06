@@ -20,7 +20,7 @@ LEFT_PAD_SYMBOL = (u"<s>", u"<s>")
 RIGHT_PAD_SYMBOL = (u"</s>", u"</s>")
 POS_PREFIX = u"POS_"
 TRIGRAM_PREFIX = u"TRIGRAM_"
-ALPHANUM_PAT = re.compile(ur"\W+")
+ALPHANUM_PAT = re.compile(r"\W+")
 
 class LexicalSimilarityGraph:
     '''
@@ -80,10 +80,8 @@ class LexicalSimilarityGraph:
                         windowWord, windowPOS = wordsAndPOS[i + offset]
                         windowPOS = u"{}{}".format(POS_PREFIX, windowPOS)
                         
-#                         wordVec[windowWord] = wordVec.get(windowWord, 0) + 1 #using get() avoids KeyError
-#                         wordVec[windowPOS] = wordVec.get(windowPOS, 0) + 1
-                        wordVec[windowWord] = 1
-                        wordVec[windowPOS] = 1
+                        wordVec[windowWord] = wordVec.get(windowWord, 0) + 1 #using get() avoids KeyError
+                        wordVec[windowPOS] = wordVec.get(windowPOS, 0) + 1
         
         #Process spelling features
         for word in wordVectors:
@@ -154,7 +152,7 @@ if __name__ == "__main__":
 #     print "pickle written"
     communities = lsg.graph.community_multilevel(weights=lsg.graph.es["weight"], return_levels=True)
     print "clustering done"
-    with open("clusters.hybridcar.nostopwords.stem.resetpercaption.prescenceNotCount.unicode.txt", "w") as f:
+    with open("clusters.hybridcar.tfidf.nostopwords.stem.resetpercaption.txt", "w") as f:
         j=0
         for level in communities:
             f.write(u"Level {}\n".format(j))

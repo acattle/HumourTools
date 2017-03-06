@@ -284,8 +284,8 @@ def process_file(file_loc):
     ignore.extend(english_stopwords)
     tweets_features = {}
     for tweet_id, tokens, pos, label in tweets:
-#         ngram_features = get_ngram_features(tokens, ignore)
-        ngram_features = {}
+        ngram_features = get_ngram_features(tokens, ignore)
+#         ngram_features = {}
         
         #it's useful to differentiate ngram features from other features since
         #they are treated differently when it comes time to get the pairwaise different
@@ -322,7 +322,7 @@ def train_and_test():
 #     trial_dir = "trial_dir/trial_data"
     trial_dir= "evaluation_dir/evaluation_data"
     tagged_dir = "tagged"
-    experiment_dir = "{} top 5 feats on eval".format(strftime("%y-%m-%d_%H%M", start_time))
+    experiment_dir = "{} top 5 feats on eval (memory test)".format(strftime("%y-%m-%d_%H%M", start_time))
     prediction_dir = "predictions"
     experiment_dir_full_path = os.path.join(semeval_dir,experiment_dir)
     if not os.path.exists(experiment_dir_full_path):
@@ -381,7 +381,6 @@ def train_and_test():
 #     #http://scikit-learn.org/stable/modules/model_persistence.html
 #     joblib.dump(dict_vect, vectorizer_loc)
     
-    
     print "{} extracting test features".format(strftime("%y-%m-%d_%H%M"))
     test_tweets_by_file = p.map(process_file, test_filenames)
 #     test_tweets_by_file=[]
@@ -396,8 +395,6 @@ def train_and_test():
 # #         print "{}s".format(time()-s)
     print "{} making test pairs finished".format(strftime("%y-%m-%d_%H%M"))
     del test_tweets_by_file #free up memory
-
-
 #     print "{} writing test pair features to disk".format(strftime("%y-%m-%d_%H%M"))
 #     with open(os.path.join(experiment_dir_full_path, "test_pairs.pkl"), "wb") as test_pairs_file:
 #         pickle.dump(test_pairs_labels_features_by_file, test_pairs_file)
@@ -448,25 +445,22 @@ def train_and_test():
               #("best less", False, ["__OVERALL_AVG_EAT_D__","__AVG_WORD_EAT_D__","__MIN_USF_F__",__MAX_USF_F__","__BIGRAM_PERPLEXITY__","__AVG_USF_F__"])]
               
               
-              ("1 from each", False, ["__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__MIN_USF_B__","__AVG_WORD_EAT_D__","__MIN_WORD_USF_D__"]),
-              ("top 5", False, ["__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__"]),
-              ("top 10", False, ["__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__OVERALL_AVG_USF_D__","__MIN_USF_F__","__MAX_EAT_B__","__OVERALL_AVG_EAT_D__","__AVG_EAT_F__"]),
-              ("perps", False, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__"]),
-              ("1 from each+ (no ngram)", False, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__MIN_USF_B__","__AVG_WORD_EAT_D__","__MIN_WORD_USF_D__"]),
-              ("top 5+ (no ngram)", False, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__"]),
-              ("top 10+ (no ngram)", False, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__OVERALL_AVG_USF_D__","__MIN_USF_F__","__MAX_EAT_B__","__OVERALL_AVG_EAT_D__","__AVG_EAT_F__"])]#,
-              
-              
-    """
+              #("1 from each", False, ["__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__MIN_USF_B__","__AVG_WORD_EAT_D__","__MIN_WORD_USF_D__"]),
+              #("top 5", False, ["__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__"]),
+              #("top 10", False, ["__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__OVERALL_AVG_USF_D__","__MIN_USF_F__","__MAX_EAT_B__","__OVERALL_AVG_EAT_D__","__AVG_EAT_F__"]),
+              #("perps", False, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__"]),
+              #("1 from each+ (no ngram)", False, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__MIN_USF_B__","__AVG_WORD_EAT_D__","__MIN_WORD_USF_D__"]),
+              #("top 5+ (no ngram)", False, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__"]),
+              #("top 10+ (no ngram)", False, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__OVERALL_AVG_USF_D__","__MIN_USF_F__","__MAX_EAT_B__","__OVERALL_AVG_EAT_D__","__AVG_EAT_F__"]),
               ("1 from each+", True, ["__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__MIN_USF_B__","__AVG_WORD_EAT_D__","__MIN_WORD_USF_D__"]),
               ("top 5+", True, ["__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__"]),
               ("top 10+", True, ["__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__OVERALL_AVG_USF_D__","__MIN_USF_F__","__MAX_EAT_B__","__OVERALL_AVG_EAT_D__","__AVG_EAT_F__"]),
               ("perps+", True, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__"]),
               ("1 from each+", True, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__MIN_USF_B__","__AVG_WORD_EAT_D__","__MIN_WORD_USF_D__"]),
               ("top 5+", True, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__"]),
-              ("top 10+", True, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__OVERALL_AVG_USF_D__","__MIN_USF_F__","__MAX_EAT_B__","__OVERALL_AVG_EAT_D__","__AVG_EAT_F__"])]#,
+              ("top 10+", True, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__OVERALL_AVG_USF_D__","__MIN_USF_F__","__MAX_EAT_B__","__OVERALL_AVG_EAT_D__","__AVG_EAT_F__"]),
               
-    
+              
               ("all", True, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_W2V__", "__AVG_W2V__", "__MAX_W2V__", "__MIN_USF_F__","__AVG_USF_B__","__AVG_USF_F__","__MAX_USF_F__","__MIN_USF_B__", "__AVG_USF_B__", "__MAX_USF_B__","__OVERALL_MIN_USF_D__", "__OVERALL_AVG_USF_D__", "__OVERALL_MAX_USF_D__","__AVG_WORD_USF_D__", "__MAX_WORD_USF_D__","__MIN_EAT_F__", "__AVG_EAT_F__", "__MAX_EAT_F__","__MIN_EAT_B__", "__AVG_EAT_B__", "__MAX_EAT_B__","__OVERALL_MIN_EAT_D__", "__OVERALL_AVG_EAT_D__", "__OVERALL_MAX_EAT_D__","__AVG_WORD_EAT_D__", "__MAX_WORD_EAT_D__"]),
               ("ngram only", True, []),
               ("no ngram", False, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_W2V__", "__AVG_W2V__", "__MAX_W2V__", "__MIN_USF_F__","__AVG_USF_F__","__MAX_USF_F__","__MIN_USF_B__", "__AVG_USF_B__", "__MAX_USF_B__","__OVERALL_MIN_USF_D__", "__OVERALL_AVG_USF_D__", "__OVERALL_MAX_USF_D__","__MIN_WORD_USF_D__","__AVG_WORD_USF_D__", "__MAX_WORD_USF_D__","__MIN_EAT_F__", "__AVG_EAT_F__", "__MAX_EAT_F__","__MIN_EAT_B__", "__AVG_EAT_B__", "__MAX_EAT_B__","__OVERALL_MIN_EAT_D__","__MIN_WORD_EAT_D__", "__OVERALL_AVG_EAT_D__", "__OVERALL_MAX_EAT_D__","__AVG_WORD_EAT_D__", "__MAX_WORD_EAT_D__"]),
@@ -507,8 +501,7 @@ def train_and_test():
               ("eat difference word min", False, ["__MIN_WORD_EAT_D__"]),
               ("eat difference word avg", False, ["__AVG_WORD_EAT_D__"]),
               ("eat difference word max", False, ["__MAX_WORD_EAT_D__"])]
-              
-              """
+    
     
     overall_output_file = os.path.join(semeval_dir,experiment_dir, "overall_accuracy.txt")
     with open(overall_output_file, "w") as output_file:
@@ -545,7 +538,7 @@ def train_and_test():
                 accuracies = []
 #                 kf = KFold(n_splits=10)
 #                 for train, test in kf.split(train_pairs_labels_features_by_file):
-#                                        
+#                                       
 #                     train_pairs_labels_features =[]
 #                     for i in train:
 #                         train_pairs_labels_features.extend(train_pairs_labels_features_by_file[i])
@@ -563,20 +556,20 @@ def train_and_test():
                 train_vectors = dict_vect.fit_transform(train_pair_dicts)
                 
                 test_pairs_labels_vectors_by_file = []
+#                 test_filenames = []
                 for test_pairs_labels_features in test_pairs_labels_features_by_file:
                     test_pairs, test_labels, test_pair_dicts = zip(*test_pairs_labels_features)
-#                     test_filenames = []
 #                     for i in test:
 #                         test_pairs, test_labels, test_pair_dicts = zip(*train_pairs_labels_features_by_file[i])
-#                         test_filenames.append(train_filenames[i])
                     test_vectors = dict_vect.transform(test_pair_dicts)
                     test_pairs_labels_vectors_by_file.append((test_pairs, test_labels, test_vectors))
-#                 #     del test_pairs_labels_features_by_file #free RAM
+#                         test_filenames.append(train_filenames[i])
+#                 del test_pairs_labels_features_by_file #free RAM #TODO: Will this break anything?
                 
                     
-#                 cv_predictions = cross_val_predict(clf, train_vectors, train_labels, cv=10, n_jobs=4, pre_dispatch=12)
-                
-                #TODO: Uncomment all of this
+    #                 cv_predictions = cross_val_predict(clf, train_vectors, train_labels, cv=10, n_jobs=4, pre_dispatch=12)
+                    
+                    #TODO: Uncomment all of this
                 clf.fit(train_vectors, train_labels)
 #                     print "{} {} classifier trained".format(strftime("%y-%m-%d_%H%M"), clf_type)
 #                     training_time = time() - train_start
@@ -618,7 +611,7 @@ def train_and_test():
                     for test_pair, test_prediction in zip(test_pairs, test_predictions):
                         left_tweet_id, right_tweet_id = test_pair
                         prediction_strs.append("\t".join([left_tweet_id, right_tweet_id, str(test_prediction)]))
-                        
+                       
                     prediction_str = "\n".join(prediction_strs)
                     with open(prediction_filename, "w") as prediction_file:
                         prediction_file.write(prediction_str)

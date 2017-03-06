@@ -3,7 +3,7 @@ Created on Jun 21, 2016
 
 @author: Andrew
 '''
-from igraph import Graph, drawing
+from igraph import Graph
 from math import log, exp
 from pymongo import MongoClient
 from numpy import mean
@@ -46,22 +46,7 @@ class PajekGraph:
         
         pathWeights =  self.graph.shortest_paths(fWords, tWords, weights=self.graph.es["weight"]) #returns weight
         
-        #TODO: Remove cod efor making subgraphs
-        path =  self.graph.get_shortest_paths(fWords[0], tWords, weights=self.graph.es["weight"], output="vpath") #returns path
-        subvertices = set()
-        for vertex in path[0]:
-            subvertices.update(self.graph.neighbors(vertex, mode="OUT"))
-#         subvs = self.graph.vs.select(subvertices)
-#         subgraph = self.graph.subgraph(subvs)
-        subgraph = self.graph.induced_subgraph(subvertices)
-        subgraph.vs["label"] = subgraph.vs["name"]
-        subgraph.es["label"] = subgraph.es["weight"] #https://stackoverflow.com/questions/21140853/labelling-the-edges-in-a-graph-with-python-igraph
-        layout = subgraph.layout("kk")
-        drawing.plot(subgraph, layout=layout)
-        
         minWeight = float("inf")
-        
-        
         
         minI = None
         minJ = None

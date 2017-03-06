@@ -284,8 +284,8 @@ def process_file(file_loc):
     ignore.extend(english_stopwords)
     tweets_features = {}
     for tweet_id, tokens, pos, label in tweets:
-#         ngram_features = get_ngram_features(tokens, ignore)
-        ngram_features = {}
+        ngram_features = get_ngram_features(tokens, ignore)
+#         ngram_features = {}
         
         #it's useful to differentiate ngram features from other features since
         #they are treated differently when it comes time to get the pairwaise different
@@ -313,16 +313,16 @@ def train_and_test():
     print "{} Starting test".format(strftime("%y-%m-%d_%H%M"))
 #     print "1gram perplexity, 2gram perplexity, w2v sim, USF, EAT"
 #     print "1gram, 2gram, 1gram perplexity, 2gram perplexity, w2v sim, USF, EAT"
-    semeval_dir = "c:/users/andrew/desktop/semeval data/"
-#     semeval_dir = "/home/acattle/SemEval"
+#     semeval_dir = "c:/users/andrew/desktop/semeval data/"
+    semeval_dir = "/home/acattle/SemEval"
     dirs = ["trial_dir/trial_data",
             "train_dir/train_data"]#,
             #"evaluation_dir/evaluation_data"]
 #     train_dir = "train_dir/train_data"
 #     trial_dir = "trial_dir/trial_data"
-    trial_dir= "evaluation_dir/evaluation_data"
+#     trial_dir= "evaluation_dir/evaluation_data"
     tagged_dir = "tagged"
-    experiment_dir = "{} top 5 feats on eval".format(strftime("%y-%m-%d_%H%M", start_time))
+    experiment_dir = "{} top 5 feats 10 fold CV".format(strftime("%y-%m-%d_%H%M", start_time))
     prediction_dir = "predictions"
     experiment_dir_full_path = os.path.join(semeval_dir,experiment_dir)
     if not os.path.exists(experiment_dir_full_path):
@@ -334,12 +334,12 @@ def train_and_test():
         for f in glob.glob("*.tsv"):
             train_filenames.append(os.path.join(semeval_dir, d, tagged_dir,f))
     
-    test_filenames= []
-    os.chdir(os.path.join(semeval_dir, trial_dir, tagged_dir))
-    for f in glob.glob("*.tsv"):
-        test_filenames.append(os.path.join(semeval_dir, trial_dir, tagged_dir,f))
+#     test_filenames= []
+#     os.chdir(os.path.join(semeval_dir, trial_dir, tagged_dir))
+#     for f in glob.glob("*.tsv"):
+#         test_filenames.append(os.path.join(semeval_dir, trial_dir, tagged_dir,f))
      
-    p = Pool(3)
+    p = Pool(12)
      
     print "{} extracting training features".format(strftime("%y-%m-%d_%H%M"))
     train_tweets_by_file = p.map(process_file, train_filenames)
@@ -382,20 +382,20 @@ def train_and_test():
 #     joblib.dump(dict_vect, vectorizer_loc)
     
     
-    print "{} extracting test features".format(strftime("%y-%m-%d_%H%M"))
-    test_tweets_by_file = p.map(process_file, test_filenames)
-#     test_tweets_by_file=[]
-#     for f in test_filenames:
-#         test_tweets_by_file.append(process_file(f))
-    print "{} making test pairs".format(strftime("%y-%m-%d_%H%M"))
-    test_pairs_labels_features_by_file = p.map(get_pair_features, test_tweets_by_file)
-# #     test_pairs_labels_features_by_file=[]
-# #     for test_tweets in test_tweets_by_file:
-# #         s = time()
-# #         test_pairs_labels_features_by_file.append(get_pair_features(test_tweets))
-# #         print "{}s".format(time()-s)
-    print "{} making test pairs finished".format(strftime("%y-%m-%d_%H%M"))
-    del test_tweets_by_file #free up memory
+#     print "{} extracting test features".format(strftime("%y-%m-%d_%H%M"))
+#     test_tweets_by_file = p.map(process_file, test_filenames)
+# #     test_tweets_by_file=[]
+# #     for f in test_filenames:
+# #         test_tweets_by_file.append(process_file(f))
+#     print "{} making test pairs".format(strftime("%y-%m-%d_%H%M"))
+#     test_pairs_labels_features_by_file = p.map(get_pair_features, test_tweets_by_file)
+# # #     test_pairs_labels_features_by_file=[]
+# # #     for test_tweets in test_tweets_by_file:
+# # #         s = time()
+# # #         test_pairs_labels_features_by_file.append(get_pair_features(test_tweets))
+# # #         print "{}s".format(time()-s)
+#     print "{} making test pairs finished".format(strftime("%y-%m-%d_%H%M"))
+#     del test_tweets_by_file #free up memory
 
 
 #     print "{} writing test pair features to disk".format(strftime("%y-%m-%d_%H%M"))
@@ -454,19 +454,14 @@ def train_and_test():
               ("perps", False, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__"]),
               ("1 from each+ (no ngram)", False, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__MIN_USF_B__","__AVG_WORD_EAT_D__","__MIN_WORD_USF_D__"]),
               ("top 5+ (no ngram)", False, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__"]),
-              ("top 10+ (no ngram)", False, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__OVERALL_AVG_USF_D__","__MIN_USF_F__","__MAX_EAT_B__","__OVERALL_AVG_EAT_D__","__AVG_EAT_F__"])]#,
-              
-              
-    """
+              ("top 10+ (no ngram)", False, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__OVERALL_AVG_USF_D__","__MIN_USF_F__","__MAX_EAT_B__","__OVERALL_AVG_EAT_D__","__AVG_EAT_F__"]),
               ("1 from each+", True, ["__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__MIN_USF_B__","__AVG_WORD_EAT_D__","__MIN_WORD_USF_D__"]),
               ("top 5+", True, ["__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__"]),
               ("top 10+", True, ["__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__OVERALL_AVG_USF_D__","__MIN_USF_F__","__MAX_EAT_B__","__OVERALL_AVG_EAT_D__","__AVG_EAT_F__"]),
               ("perps+", True, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__"]),
               ("1 from each+", True, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__MIN_USF_B__","__AVG_WORD_EAT_D__","__MIN_WORD_USF_D__"]),
               ("top 5+", True, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__"]),
-              ("top 10+", True, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__OVERALL_AVG_USF_D__","__MIN_USF_F__","__MAX_EAT_B__","__OVERALL_AVG_EAT_D__","__AVG_EAT_F__"])]#,
-              
-    
+              ("top 10+", True, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_EAT_B__","__MIN_EAT_F__","__OVERALL_MIN_EAT_D__","__AVG_USF_F__","__OVERALL_MIN_USF_D__","__OVERALL_AVG_USF_D__","__MIN_USF_F__","__MAX_EAT_B__","__OVERALL_AVG_EAT_D__","__AVG_EAT_F__"]),
               ("all", True, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_W2V__", "__AVG_W2V__", "__MAX_W2V__", "__MIN_USF_F__","__AVG_USF_B__","__AVG_USF_F__","__MAX_USF_F__","__MIN_USF_B__", "__AVG_USF_B__", "__MAX_USF_B__","__OVERALL_MIN_USF_D__", "__OVERALL_AVG_USF_D__", "__OVERALL_MAX_USF_D__","__AVG_WORD_USF_D__", "__MAX_WORD_USF_D__","__MIN_EAT_F__", "__AVG_EAT_F__", "__MAX_EAT_F__","__MIN_EAT_B__", "__AVG_EAT_B__", "__MAX_EAT_B__","__OVERALL_MIN_EAT_D__", "__OVERALL_AVG_EAT_D__", "__OVERALL_MAX_EAT_D__","__AVG_WORD_EAT_D__", "__MAX_WORD_EAT_D__"]),
               ("ngram only", True, []),
               ("no ngram", False, ["__UNIGRAM_PERPLEXITY__","__BIGRAM_PERPLEXITY__","__MIN_W2V__", "__AVG_W2V__", "__MAX_W2V__", "__MIN_USF_F__","__AVG_USF_F__","__MAX_USF_F__","__MIN_USF_B__", "__AVG_USF_B__", "__MAX_USF_B__","__OVERALL_MIN_USF_D__", "__OVERALL_AVG_USF_D__", "__OVERALL_MAX_USF_D__","__MIN_WORD_USF_D__","__AVG_WORD_USF_D__", "__MAX_WORD_USF_D__","__MIN_EAT_F__", "__AVG_EAT_F__", "__MAX_EAT_F__","__MIN_EAT_B__", "__AVG_EAT_B__", "__MAX_EAT_B__","__OVERALL_MIN_EAT_D__","__MIN_WORD_EAT_D__", "__OVERALL_AVG_EAT_D__", "__OVERALL_MAX_EAT_D__","__AVG_WORD_EAT_D__", "__MAX_WORD_EAT_D__"]),
@@ -507,8 +502,6 @@ def train_and_test():
               ("eat difference word min", False, ["__MIN_WORD_EAT_D__"]),
               ("eat difference word avg", False, ["__AVG_WORD_EAT_D__"]),
               ("eat difference word max", False, ["__MAX_WORD_EAT_D__"])]
-              
-              """
     
     overall_output_file = os.path.join(semeval_dir,experiment_dir, "overall_accuracy.txt")
     with open(overall_output_file, "w") as output_file:
@@ -532,7 +525,7 @@ def train_and_test():
             train_pairs_labels_features_by_file = p.map(get_pair_features, train_tweets_by_file_key_subset)
             
             #turns out SVC(kernel="linear") and LinearSVC() use different libraries. LinearSVC finishes way way fasterS
-            clfs = [RandomForestClassifier(n_estimators=100, n_jobs=3)]#, LinearSVC(), SVC(kernel="rbf")]
+            clfs = [RandomForestClassifier(n_estimators=100, n_jobs=12)]#, LinearSVC(), SVC(kernel="rbf")]
             for clf, clf_type in zip(clfs, ["rf"]):#, "linsvm","rbfsvm"]):
                 print "{} Starting {} classifier training for {}".format(strftime("%y-%m-%d_%H%M"), clf_type, exp_label)
 #                 train_start = time()
@@ -543,85 +536,85 @@ def train_and_test():
                 recalls = []
                 f1s = []
                 accuracies = []
-#                 kf = KFold(n_splits=10)
-#                 for train, test in kf.split(train_pairs_labels_features_by_file):
-#                                        
-#                     train_pairs_labels_features =[]
-#                     for i in train:
-#                         train_pairs_labels_features.extend(train_pairs_labels_features_by_file[i])
-                train_pairs_labels_features =[]
-                for file_pairs_labels_features in train_pairs_labels_features_by_file:
-                    train_pairs_labels_features.extend(file_pairs_labels_features)
+                kf = KFold(n_splits=10)
+                for train, test in kf.split(train_pairs_labels_features_by_file):
+                                       
+                    train_pairs_labels_features =[]
+                    for i in train:
+                        train_pairs_labels_features.extend(train_pairs_labels_features_by_file[i])
+#                 train_pairs_labels_features =[]
+#                 for file_pairs_labels_features in train_pairs_labels_features_by_file:
+#                     train_pairs_labels_features.extend(file_pairs_labels_features)
                          
-                #randomize the order
-                seed(10) #set a seed for repeatability
-                shuffle(train_pairs_labels_features)
-                 
-                train_pairs, train_labels, train_pair_dicts = zip(*train_pairs_labels_features)
-        
-                dict_vect = DictVectorizer()
-                train_vectors = dict_vect.fit_transform(train_pair_dicts)
-                
-                test_pairs_labels_vectors_by_file = []
-                for test_pairs_labels_features in test_pairs_labels_features_by_file:
-                    test_pairs, test_labels, test_pair_dicts = zip(*test_pairs_labels_features)
-#                     test_filenames = []
-#                     for i in test:
-#                         test_pairs, test_labels, test_pair_dicts = zip(*train_pairs_labels_features_by_file[i])
-#                         test_filenames.append(train_filenames[i])
-                    test_vectors = dict_vect.transform(test_pair_dicts)
-                    test_pairs_labels_vectors_by_file.append((test_pairs, test_labels, test_vectors))
+                    #randomize the order
+                    seed(10) #set a seed for repeatability
+                    shuffle(train_pairs_labels_features)
+                     
+                    train_pairs, train_labels, train_pair_dicts = zip(*train_pairs_labels_features)
+            
+                    dict_vect = DictVectorizer()
+                    train_vectors = dict_vect.fit_transform(train_pair_dicts)
+                    
+                    test_pairs_labels_vectors_by_file = []
+    #                 for test_pairs_labels_features in test_pairs_labels_features_by_file:
+    #                     test_pairs, test_labels, test_pair_dicts = zip(*test_pairs_labels_features)
+                    test_filenames = []
+                    for i in test:
+                        test_pairs, test_labels, test_pair_dicts = zip(*train_pairs_labels_features_by_file[i])
+                        test_filenames.append(train_filenames[i])
+                        test_vectors = dict_vect.transform(test_pair_dicts)
+                        test_pairs_labels_vectors_by_file.append((test_pairs, test_labels, test_vectors))
 #                 #     del test_pairs_labels_features_by_file #free RAM
                 
                     
-#                 cv_predictions = cross_val_predict(clf, train_vectors, train_labels, cv=10, n_jobs=4, pre_dispatch=12)
-                
-                #TODO: Uncomment all of this
-                clf.fit(train_vectors, train_labels)
-#                     print "{} {} classifier trained".format(strftime("%y-%m-%d_%H%M"), clf_type)
-#                     training_time = time() - train_start
-#                     m,s=divmod(training_time, 60)
-#                     h,m=divmod(m, 60)
-#                     h = str(int(h)).zfill(2)
-#                     m = str(int(m)).zfill(2)
-#                     s = str(int(s)).zfill(2)
-#                     print "Training time: {}:{}:{}".format(h,m,s)
-                
-                #TODO: Uncomment all of this
-#                     print "{} starting testing".format(strftime("%y-%m-%d_%H%M"))
-                #TODO: uncomment after leave-one-file-out cross validation
-#                     all_labels = []
-#                     all_predictions = []
-                for test_filename, test_pairs_labels_vectors in zip(test_filenames, test_pairs_labels_vectors_by_file):
-#                 for test_pairs_labels_vectors in test_pairs_labels_vectors_by_file:
-                    hashtag, extension = os.path.splitext(os.path.basename(test_filename))
-                    print "{} Testing {}".format(strftime("%y-%m-%d_%H%M"), hashtag)
-                    predict_dir_full_path = os.path.join(experiment_dir_full_path,prediction_dir,clf_type)
-                    if not os.path.exists(predict_dir_full_path):
-                        os.makedirs(predict_dir_full_path)
-                    prediction_filename = os.path.join(predict_dir_full_path, hashtag+"_PREDICT"+extension)
-                     
-                    test_pairs, test_labels, test_vectors = test_pairs_labels_vectors
-                    all_labels.extend(test_labels)
-                     
-                    test_predictions = clf.predict(test_vectors)
-                    all_predictions.extend(test_predictions)
+    #                 cv_predictions = cross_val_predict(clf, train_vectors, train_labels, cv=10, n_jobs=4, pre_dispatch=12)
                     
-                    precision, recall, f1, support = precision_recall_fscore_support(test_labels, test_predictions,average="micro")
-                    precisions.append(precision)
-                    recalls.append(recall)
-                    f1s.append(f1)
-                    accuracies.append(accuracy_score(test_labels, test_predictions))
-                 
-                    print "{} Writing predictions to {}".format(strftime("%y-%m-%d_%H%M"), prediction_filename)
-                    prediction_strs = []
-                    for test_pair, test_prediction in zip(test_pairs, test_predictions):
-                        left_tweet_id, right_tweet_id = test_pair
-                        prediction_strs.append("\t".join([left_tweet_id, right_tweet_id, str(test_prediction)]))
+                    #TODO: Uncomment all of this
+                    clf.fit(train_vectors, train_labels)
+    #                     print "{} {} classifier trained".format(strftime("%y-%m-%d_%H%M"), clf_type)
+    #                     training_time = time() - train_start
+    #                     m,s=divmod(training_time, 60)
+    #                     h,m=divmod(m, 60)
+    #                     h = str(int(h)).zfill(2)
+    #                     m = str(int(m)).zfill(2)
+    #                     s = str(int(s)).zfill(2)
+    #                     print "Training time: {}:{}:{}".format(h,m,s)
+                    
+                    #TODO: Uncomment all of this
+    #                     print "{} starting testing".format(strftime("%y-%m-%d_%H%M"))
+                    #TODO: uncomment after leave-one-file-out cross validation
+    #                     all_labels = []
+    #                     all_predictions = []
+                    for test_filename, test_pairs_labels_vectors in zip(test_filenames, test_pairs_labels_vectors_by_file):
+    #                 for test_pairs_labels_vectors in test_pairs_labels_vectors_by_file:
+                        hashtag, extension = os.path.splitext(os.path.basename(test_filename))
+                        print "{} Testing {}".format(strftime("%y-%m-%d_%H%M"), hashtag)
+                        predict_dir_full_path = os.path.join(experiment_dir_full_path,prediction_dir,clf_type)
+                        if not os.path.exists(predict_dir_full_path):
+                            os.makedirs(predict_dir_full_path)
+                        prediction_filename = os.path.join(predict_dir_full_path, hashtag+"_PREDICT"+extension)
+                         
+                        test_pairs, test_labels, test_vectors = test_pairs_labels_vectors
+                        all_labels.extend(test_labels)
+                         
+                        test_predictions = clf.predict(test_vectors)
+                        all_predictions.extend(test_predictions)
                         
-                    prediction_str = "\n".join(prediction_strs)
-                    with open(prediction_filename, "w") as prediction_file:
-                        prediction_file.write(prediction_str)
+                        precision, recall, f1, support = precision_recall_fscore_support(test_labels, test_predictions,average="micro")
+                        precisions.append(precision)
+                        recalls.append(recall)
+                        f1s.append(f1)
+                        accuracies.append(accuracy_score(test_labels, test_predictions))
+                     
+                        print "{} Writing predictions to {}".format(strftime("%y-%m-%d_%H%M"), prediction_filename)
+                        prediction_strs = []
+                        for test_pair, test_prediction in zip(test_pairs, test_predictions):
+                            left_tweet_id, right_tweet_id = test_pair
+                            prediction_strs.append("\t".join([left_tweet_id, right_tweet_id, str(test_prediction)]))
+                            
+                        prediction_str = "\n".join(prediction_strs)
+                        with open(prediction_filename, "w") as prediction_file:
+                            prediction_file.write(prediction_str)
                       
                   
                       
