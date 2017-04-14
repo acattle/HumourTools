@@ -3,7 +3,8 @@ Created on Jan 22, 2017
 
 @author: Andrew
 '''
-from gensim.models import TfidfModel, LdaModel, LsiModel
+from gensim.models import TfidfModel, LsiModel
+from gensim.models.ldamodel import LdaModel
 from gensim.corpora import Dictionary
 from numpy import zeros, isnan, mean
 from scipy.stats import entropy
@@ -16,11 +17,14 @@ from time import strftime
 import codecs
 
 class GensimDocSummarization(object):
-    def __init__(self, word_ids_loc, tfidf_model_loc, dimensions=300):
+    def __init__(self, word_ids_loc, tfidf_model_loc, dimensions=300, cache=True):
         self.id2word = Dictionary.load_from_text(word_ids_loc)
         self.tfidf = TfidfModel.load(tfidf_model_loc)
         self.dimensions = dimensions
         self.model=None
+        self._cache=None
+        if cache==True:
+            self._cache = {}
     
     def _convert_to_numpy_array(self, tuples):
         #initialize vector to all 0s
@@ -32,12 +36,21 @@ class GensimDocSummarization(object):
         return vec
     
     def get_vector(self,document):
-        #get bag of words features for document
-        tokens = document.split()
-        bow = self.id2word.doc2bow(tokens)
-        tfidf_tokens = self.tfidf[bow]
-        tuples = self.model[tfidf_tokens]
-        return self._convert_to_numpy_array(tuples)
+        vector = None
+        if (self._cache != None) and (document in self._cache):
+            vector = self._cache[document]
+        else:
+            #get bag of words features for document
+            tokens = document.split()
+            bow = self.id2word.doc2bow(tokens)
+            tfidf_tokens = self.tfidf[bow]
+            tuples = self.model[tfidf_tokens]
+            vector = self._convert_to_numpy_array(tuples)
+            
+            if self._cache != None:
+                self._cache[document] = vector
+            
+        return vector
     
     def get_similarity(self, word1, word2):
         return 1-cosine(self.get_vector(word1), self.get_vector(word2)) #since it's cosine distance
@@ -48,12 +61,15 @@ class GensimDocSummarization(object):
 class LDAVectorizer(GensimDocSummarization):
     def __init__(self, lda_fileloc, word_ids_loc, tfidf_model_loc):
         super(LDAVectorizer, self).__init__(word_ids_loc, tfidf_model_loc)
-        self.model = LdaModel.load(lda_fileloc)
+        self.model = LdaModel.load(lda_fileloc, mmap="r")
 
 class LSIVectorizer(GensimDocSummarization):
     def __init__(self, lsi_fileloc, word_ids_loc, tfidf_model_loc):
         super(LSIVectorizer, self).__init__(word_ids_loc, tfidf_model_loc)
         self.model = LsiModel.load(lsi_fileloc)
+        
+        #hack to get around an error?
+#         self.model.minimum_phi_value = None
 
 if __name__ == "__main__":
 #     lsi = LSIVectorizer(r"C:\Users\Andrew\Desktop\vectors\lda_prep_no_lemma\no_lemma.lsi", r"C:\Users\Andrew\Desktop\vectors\lda_prep_no_lemma\lda_no_lemma_wordids.txt.bz2", r"C:\Users\Andrew\Desktop\vectors\lda_prep_no_lemma\lda_no_lemma.tfidf_model")

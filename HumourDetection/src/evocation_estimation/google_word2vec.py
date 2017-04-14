@@ -3,14 +3,14 @@ Created on Jan 25, 2017
 
 @author: Andrew
 '''
-from gensim.models.word2vec import Word2Vec
+from gensim.models import KeyedVectors
 from scipy.stats import entropy
 from numpy import zeros
 
 class GoogleWord2Vec(object):
-    def __init__(self, vector_loc):
+    def __init__(self, vector_loc, binary=True):
         #http://mccormickml.com/2016/04/12/googles-pretrained-word2vec-model-in-python/
-        self.model = Word2Vec.load_word2vec_format(vector_loc, binary=True)
+        self.model = KeyedVectors.load_word2vec_format(vector_loc, binary=binary)
     
     def get_vector(self, word):
         vector = None

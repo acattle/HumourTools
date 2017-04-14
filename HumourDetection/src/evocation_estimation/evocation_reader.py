@@ -8,7 +8,7 @@ from numpy import mean
 from networkx.classes.function import set_edge_attributes
 from networkx.classes.digraph import DiGraph
 from math import log
-# import pickle
+import pickle
 from time import strftime
 # from igraph import Graph, OUT
 import os
@@ -19,6 +19,8 @@ from nltk.corpus import stopwords
 from multiprocessing import Pool
 from collections import defaultdict
 from os.path import join
+from networkx.algorithms.centrality.load import load_centrality
+from networkx.algorithms.centrality.betweenness import betweenness_centrality
 
 class EATGraph(object):
     def __init__(self, eat_pajek_loc):
@@ -52,7 +54,7 @@ class EATGraph(object):
         
     
     def get_all_associations(self):
-        self.graph.edges(data='weight', default=0)
+        return self.graph.edges(data='weight', default=0)
 
 class USFGraph(object):
     def __init__(self, usf_pajek_loc):
@@ -144,8 +146,10 @@ class EvocationDataset(object):
 
                                    
 if __name__ == "__main__":
-    eat_loc = "C:/Users/Andrew/git/HumourDetection/HumourDetection/src/Data/eat/pajek/EATnew2.net"
-    usf_loc = "C:/Users/Andrew/git/HumourDetection/HumourDetection/src/Data/PairsFSG2.net"
+#     eat_loc = "C:/Users/Andrew/git/HumourDetection/HumourDetection/src/Data/eat/pajek/EATnew2.net"
+    eat_loc = "../shortest_paths/EATnew2.net"
+#     usf_loc = "C:/Users/Andrew/git/HumourDetection/HumourDetection/src/Data/PairsFSG2.net"
+    usf_loc = "../shortest_paths/PairsFSG2.net"
 #     english_stopwords = stopwords.words("english")
 #     pos_to_ignore = ["D","P","X","Y", "T", "&", "~", ",", "!", "U", "E"]
 #     semeval_dir = r"C:/Users/Andrew/Desktop/SemEval Data"
@@ -302,6 +306,14 @@ if __name__ == "__main__":
 #     try:
     print "{} loading EAT".format(strftime("%y-%m-%d_%H:%M:%S"))
     g = EATGraph(eat_loc)
+    
+    load = load_centrality(g.graph, weight="weight")
+    with open("eat_load_weighted.pkl", "wb") as load_file:
+        pickle.dump(load,load_file)
+         
+    betweenness = betweenness_centrality(g.graph, weight="weight")
+    with open("eat_betweenness_weighted.pkl", "wb") as betweenness_file:
+        pickle.dump(betweenness, betweenness_file)
 #         with open("eat_graph.pkl", "wb") as graph_file:
 #             pickle.dump(g, graph_file)
 #         print "{} starting EAT paths".format(strftime("%y-%m-%d_%H:%M:%S"))
@@ -314,7 +326,15 @@ if __name__ == "__main__":
 #         
 #     try:    
     print "{} loading USF".format(strftime("%y-%m-%d_%H:%M:%S"))
-    g2 = USFGraph(usf_loc)
+    g = USFGraph(usf_loc)
+    
+    load = load_centrality(g.graph, weight="weight")
+    with open("usf_load_weighted.pkl", "wb") as load_file:
+        pickle.dump(load,load_file)
+         
+    betweenness = betweenness_centrality(g.graph, weight="weight")
+    with open("usf_betweenness_weighted.pkl", "wb") as betweenness_file:
+        pickle.dump(betweenness, betweenness_file)
     
     print "done"
 #         with open("usf_graph.pkl", "wb") as graph_file:
