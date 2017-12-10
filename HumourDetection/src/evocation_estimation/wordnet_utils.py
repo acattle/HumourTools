@@ -5,7 +5,11 @@ Created on Jan 27, 2017
 '''
 from numpy import zeros, hstack
 from math import log, isinf
+<<<<<<< HEAD
 from six import iteritems
+=======
+from nltk.compat import iteritems
+>>>>>>> refs/remotes/origin/master
 
 _pos = ['a',
         's',

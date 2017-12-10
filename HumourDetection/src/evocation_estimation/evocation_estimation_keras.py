@@ -5,7 +5,6 @@ Created on Jan 9, 2017
 '''
 import argparse
 
-
 # from evocation_reader import EATGraph, USFGraph, EvocationDataset
 # from evocation_feature_extractor import FeatureExtractor
 from numpy import array, float32, vstack,hstack, nan_to_num#, float64
