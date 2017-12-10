@@ -1,0 +1,9 @@
+/Data/
+/results/
+/SemEval Data/
+/tweet_data/
+
+/wiki.en.text.vector
+*.pyc
+*.pkl
+*.pickle
