@@ -21,7 +21,6 @@ from sklearn.exceptions import NotFittedError
 from sklearn.pipeline import Pipeline
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.neighbors import NearestNeighbors
-from sklearn.ensemble.forest import RandomForestClassifier
 from humour_features.utils.common_features import get_alliteration_and_rhyme_features
 
 def _convert_pos_to_wordnet(treebank_tag):
@@ -55,9 +54,11 @@ def train_yang_et_al_2015_pipeline(X, y, w2v_loc, wilson_lexicon_loc, k=5):
         :return: A trained pipeline that takes in tokenized documents and outputs predictions
         :rtype: sklearn.pipeline.Pipeline
     """
+    
+    from sklearn.ensemble.forest import RandomForestClassifier
     yang_pipeline = Pipeline([("extract_features", YangHumourFeatureExtractor(w2v_loc,wilson_lexicon_loc,k)),
-                                ("random_forest_classifier", RandomForestClassifier()) #TODO: more than the default 10 estimators?
-                                ])
+                              ("random_forest_classifier", RandomForestClassifier()) #TODO: more than the default 10 estimators?
+                              ])
     yang_pipeline.fit(X,y)
     
     return yang_pipeline
@@ -372,7 +373,7 @@ class YangHumourFeatureExtractor(TransformerMixin):
             :returns: a matrix where columns represent labels of the K nearest training examples and rows are documents
             :rtype: numpy.array
             
-            :raises NotFittedError: If KNN model hasn't been initialized or if training labels not supplied to fit()
+            :raises NotFittedError: If KNN model hasn't been initialized
         """
         
         #TODO: should I include an extra, majority label feature?
@@ -390,6 +391,9 @@ class YangHumourFeatureExtractor(TransformerMixin):
     def fit(self,X,y):
         """
             Fits KNN model so that KNN features can be extracted
+            
+            :returns: self (for compatibility with sklearn pipelines)
+            :rtype: TransformerMixin
         """
         
         self.train_y = y
@@ -409,7 +413,7 @@ class YangHumourFeatureExtractor(TransformerMixin):
             :param X: pre-tokenized documents
             :type X: list(list(str))
             
-            :return: highest performing Yang et al. (2015) as a numpy array
+            :return: highest performing Yang et al. (2015) features as a numpy array
             :rtype: numpy.array
         """
         
