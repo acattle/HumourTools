@@ -337,7 +337,7 @@ class FeatureExtractor(object):
     
     def _add_extended_lesk_feats(self, association_tuples, verbose=True):
         if (self.lesk_relations != None):
-            el = ExtendedLesk(self.lesk_relations)
+            el = ExtendedLesk(self.lesk_relations, cache=True) #doesn't matter if we cache since we deleted it when we're done.
             
             processed = 0
             total = len(association_tuples)
