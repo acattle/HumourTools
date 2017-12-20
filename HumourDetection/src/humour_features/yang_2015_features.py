@@ -321,12 +321,8 @@ class YangHumourFeatureExtractor(TransformerMixin):
             :rtype: numpy.array
         """
         
-        feature_vectors =[]
-        for document in documents:
-            #add all 4 features from get_alliteration_and_rhyme_features()
-            feature_vectors.append(get_alliteration_and_rhyme_features(document))
-        
-        return np.vstack(feature_vectors)
+        #add all 4 features from get_alliteration_and_rhyme_features()
+        return get_alliteration_and_rhyme_features(documents)
         
     def get_average_w2v(self,documents):
         """
