@@ -4,12 +4,8 @@ Created on Jan 27, 2017
 @author: Andrew
 '''
 from numpy import zeros, hstack
-from math import log, isinf
-<<<<<<< HEAD
+from math import log
 from six import iteritems
-=======
-from nltk.compat import iteritems
->>>>>>> refs/remotes/origin/master
 
 _pos = ['a',
         's',
