@@ -18,7 +18,6 @@ from itertools import combinations, product
 from evocation_estimation.google_word2vec import GoogleWord2Vec
 from sklearn.base import TransformerMixin
 from sklearn.exceptions import NotFittedError
-from sklearn.pipeline import Pipeline
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.neighbors import NearestNeighbors
 from humour_features.utils.common_features import get_alliteration_and_rhyme_features
@@ -55,6 +54,7 @@ def train_yang_et_al_2015_pipeline(X, y, w2v_loc, wilson_lexicon_loc, k=5):
         :rtype: sklearn.pipeline.Pipeline
     """
     
+    from sklearn.pipeline import Pipeline
     from sklearn.ensemble.forest import RandomForestClassifier
     yang_pipeline = Pipeline([("extract_features", YangHumourFeatureExtractor(w2v_loc,wilson_lexicon_loc,k)),
                               ("random_forest_classifier", RandomForestClassifier()) #TODO: more than the default 10 estimators?

@@ -24,8 +24,8 @@ from humour_features.utils.wordnet_domains import WordNetDomains
 from sklearn.base import TransformerMixin
 from sklearn.exceptions import NotFittedError
 from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.naive_bayes import GaussianNB
-from sklearn.svm.classes import SVC
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.svm.classes import LinearSVC
 from sklearn.pipeline import Pipeline
 
 def train_mihalcea_strapparava_2005_pipeline(X, y, wnd_loc, content_model="svm"):
@@ -127,6 +127,7 @@ class MihalceaFeatureExtractor(TransformerMixin):
             :param wnd_loc: the location of the WordNet Domains file
             :type wnd_loc: str
             :param content_model: the type of classifier to train for content-based features. Must be "nb" or "svm"
+            :param content_model: the type of classifier to train for content-based features. Must be "nb" (for Multinomial Naive Bayes) or "svm" (for Support Vector Machine)
             :type content_model: str
         """
         
@@ -273,10 +274,10 @@ class MihalceaFeatureExtractor(TransformerMixin):
         steps =[("count_vector", CountVectorizer(tokenizer=lambda x:  x, preprocessor=lambda x: x))] #skip tokenization and preporcessing
         
         if self.content_model_type == "nb":
-            steps.append(("naive_bayes", GaussianNB()))
+            steps.append(("naive_bayes", MultinomialNB())) #Multinomal, as specified in Mihalcea and Strapparava (2005)
             
         elif self.content_model_type == "svm":
-            steps.append(("svm", SVC()))
+            steps.append(("svm", LinearSVC()))
             
         else:
             raise ValueError("Unknown content model type '{}'. Must be 'nb' or 'svm'.".format(self.content_model_type))
