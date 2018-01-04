@@ -6,10 +6,8 @@ Created on Jan 27, 2017
 from __future__ import print_function, division #for Python 2.7 compatibility
 import pickle
 from lda_vector import LDAVectorizer
-from google_word2vec import GoogleWord2Vec
 from autoextend import AutoExtendEmbeddings
 from wordnet_graph import WordNetGraph
-from numpy import hstack, zeros, float32, empty, vstack, nan,nan_to_num,inf
 import numpy as np
 from nltk.corpus import wordnet as wn
 import warnings
@@ -17,15 +15,16 @@ from vocab import Vocabulary
 from word2gauss import GaussianEmbedding
 from wordnet_utils import WordNetUtils
 import re
-from scipy.spatial.distance import cosine
 # import os
 from extended_lesk import ExtendedLesk
 from util.gensim_wrappers.gensim_vector_models import load_gensim_vector_model
 from util.model_name_consts import STANFORD_GLOVE, GOOGLE_W2V, AUTOEXTEND,\
     WIKIPEDIA_LDA, WIKIPEDIA_TFIDF
+from scipy.spatial.distance import cosine
+from sklearn.base import TransformerMixin
 
 
-class FeatureExtractor(object):
+class EvocationFeatureExtractor(TransformerMixin):
     def __init__(self, lda_loc=None, wordids_loc=None, tfidf_loc=None, w2v_loc=None, autoex_loc=None, betweenness_loc=None, load_loc=None, wordnetgraph_loc=None, glove_loc=None, w2g_model_loc=None, w2g_vocab_loc=None, lesk_relations=None, dtype=np.float32, full_dir=""):
         self.lda_loc = lda_loc
         self.wordids_loc = wordids_loc
@@ -53,6 +52,7 @@ class FeatureExtractor(object):
 #         with open(wordnetgraph_loc, "rb") as wordnetgraph_pkl:
 #             self.wn_graph = pickle.load(wordnetgraph_pkl)
         self.dtype=dtype
+        self.full_dir=full_dir
     
     
     def _get_synsets(self,word):
@@ -66,67 +66,82 @@ class FeatureExtractor(object):
     def _underscore_to_space(self, word):
         return re.sub("_", " ",word)
     
-    def _add_lda_feats(self,association_tuples, verbose=True):
+    def fit(self,X, y=None):
+        return self
+    
+    def get_lda_feats(self,stimuli_response, verbose=True):
+        features = []
         if (self.lda_loc != None) and (self.wordids_loc!=None) and(self.tfidf_loc!=None):
             lda = LDAVectorizer(self.lda_loc, self.wordids_loc, self.tfidf_loc, word_separator="_")
             
-            processed = 0
-            total = len(association_tuples)
-            for stimuli, response, features_dict, _ in association_tuples:
-                features_dict["lda sim"]=lda.get_similarity(stimuli, response)
+            total = len(stimuli_response)
+            for stimuli, response in stimuli_response:
+                lda_sim =lda.get_similarity(stimuli, response)
                 
-                processed += 1
-                if verbose and (processed % 500 == 0):
-                    print("{}/{} done".format(processed, total))
+                features.append(lda_sim)
+                
+                if verbose and (len(features) % 500 == 0):
+                    print("{}/{} done".format(len(features), total))
+            
             
             del lda #clear from memory
         
         else:
             warnings.warn("One or more of lda_loc, wordids_loc, or tfidf_loc is unspecified. Returning blank features")
+            features = [[] * len(stimuli_response)]
         
-        return association_tuples
+        return np.vstack(features)
     
-    def _add_w2v_feats(self,association_tuples):
+    def get_w2v_feats(self,stimuli_response):
+        features=[]
         if (self.w2v_loc != None):
             w2v = load_gensim_vector_model(GOOGLE_W2V, self.w2v_loc)
             
-            for stimuli, response, features_dict, _ in association_tuples:
+            for stimuli, response in stimuli_response:
                 santized_stimuli = self._space_to_underscore(stimuli)
                 santized_response = self._space_to_underscore(response)
-                features_dict["w2v sim"] = w2v.get_similarity(santized_stimuli, santized_response)
-                features_dict["w2v offset"] = w2v.get_vector(santized_stimuli) - w2v.get_vector(santized_response)
+                
+                w2v_sim = w2v.get_similarity(santized_stimuli, santized_response)
+                w2v_offset = w2v.get_vector(santized_stimuli) - w2v.get_vector(santized_response)
+                features.append(np.hstack((w2v_sim, w2v_offset)))
                 
             w2v._purge_model() #free up memory. We can reload it from disk if needed
         
         else:
             warnings.warn("No word2vec location specified. Returning blank features")
+            features = [[] * len(stimuli_response)]
         
-        return association_tuples
+        return np.vstack(features)
     
-    def _add_glove_feats(self,association_tuples):
+    def get_glove_feats(self,stimuli_response):
+        features = []
         if (self.glove_loc != None):
             glove = load_gensim_vector_model(STANFORD_GLOVE, self.glove_loc, True) #https://radimrehurek.com/gensim/scripts/glove2word2vec.html
             
-            for stimuli, response, features_dict, _ in association_tuples:
+            for stimuli, response in stimuli_response:
                 santized_stimuli = self._space_to_underscore(stimuli)
                 santized_response = self._space_to_underscore(response)
-                features_dict["glove sim"] = glove.get_similarity(santized_stimuli, santized_response)
-                features_dict["glove offset"] = glove.get_vector(santized_stimuli) - glove.get_vector(santized_response)
+                
+                glove_sim = glove.get_similarity(santized_stimuli, santized_response)
+                glove_offset = glove.get_vector(santized_stimuli) - glove.get_vector(santized_response)
+                features.append(np.hstack((glove_sim, glove_offset)))
             
             glove._purge_model() #free up memory. We can reload it from disk if needed
         
         else:
             warnings.warn("No GloVe location specified. Returning blank features")
+            features = [[] * len(stimuli_response)]
         
-        return association_tuples
+        return np.vstack(features)
     
-    def _add_autoex_feats(self,association_tuples):
+    def get_autoex_feats(self,stimuli_response):
+        features = []
         if (self.autoex_loc != None):
 #             with open(self.autoex_loc, "rb") as autoex_pkl:
 #                 autoex = pickle.load(autoex_pkl)
             autoex = load_gensim_vector_model(AUTOEXTEND, self.autoex_loc, True)
             
-            for stimuli, response, features_dict, _ in association_tuples:
+            for stimuli, response, in stimuli_response:
                 stimuli_synsets = self._get_synset_names(stimuli)
                 response_synsets = self._get_synset_names(response)
                 
@@ -137,24 +152,28 @@ class FeatureExtractor(object):
                 
                 if (len(stimuli_synsets) == 0) or (len(response_synsets) == 0):
                     #if one of the words has 0 synsets, insert a dumbie value to avoid errors
-                    synset_sims.append(nan)
+                    synset_sims.append(np.nan)
                 
-                features_dict["max autoex sim"] = max(synset_sims)
-                features_dict["avg autoex sim"] = sum(synset_sims)/len(synset_sims)
-            
+                max_sim = max(synset_sims)
+                avg_sim = np.mean(synset_sims)
+                
+                features.append((max_sim,avg_sim))
+                            
             autoex._purge_model() #free up memory. We can reload it from disk if needed
         
         else:
             warnings.warn("No AutoEx location specified. Returning blank features")
+            features = [[] * len(stimuli_response)]
         
-        return association_tuples
+        return np.vstack(features)
     
-    def _add_wn_betweenness(self,association_tuples):
+    def get_wn_betweenness(self,stimuli_response):
+        features = []
         if (self.betweenness_loc != None):
             with open(self.betweenness_loc, "rb") as betweeneness_pkl:
                 betweenness = pickle.load(betweeneness_pkl)
             
-            for stimuli, response, features_dict, _ in association_tuples:
+            for stimuli, response in stimuli_response:
                 stimuli_synsets = self._get_synset_names(stimuli)
                 stimuli_betweennesses = []
                 for stimuli_synset in stimuli_synsets:
@@ -163,9 +182,9 @@ class FeatureExtractor(object):
                     #if stimuli has 0 synsets, insert a dumbie value to avoid errors
                     stimuli_betweennesses.append(0)
                 
-                features_dict["max stimuli betweenness"] = max(stimuli_betweennesses)
-                features_dict["total stimuli betweenness"] = sum(stimuli_betweennesses)
-                features_dict["avg stimuli betweenness"] = sum(stimuli_betweennesses)/len(stimuli_betweennesses)
+                max_stim_betweenness = max(stimuli_betweennesses)
+                total_stim_betweenness = sum(stimuli_betweennesses)
+                avg_stim_betweenness = np.mean(stimuli_betweennesses)
                 
                 response_synsets = self._get_synset_names(response)
                 response_betweennesses = []
@@ -175,23 +194,30 @@ class FeatureExtractor(object):
                     #if respose has 0 synsets, insert a dumbie value to avoid errors
                     response_betweennesses.append(0)
                 
-                features_dict["max response betweenness"] = max(response_betweennesses)
-                features_dict["total response betweenness"] = sum(response_betweennesses)
-                features_dict["avg response betweenness"] = sum(response_betweennesses)/len(response_betweennesses)
+                max_resp_betweenness = max(response_betweennesses)
+                total_resp_betweenness = sum(response_betweennesses)
+                avg_resp_betweenness = np.mean(response_betweennesses)
+                
+                features.append((max_stim_betweenness, max_resp_betweenness,
+                                 total_stim_betweenness, total_resp_betweenness,
+                                 avg_stim_betweenness, avg_resp_betweenness
+                                 ))
             
             del betweenness #clear from memory
         
         else:
             warnings.warn("No Betweenness Centrality location specified. Returning blank features")
+            features = [[] * len(stimuli_response)]
         
-        return association_tuples
+        return np.vstack(features)
     
-    def _add_wn_load(self,association_tuples):
+    def get_wn_load(self,stimuli_response):
+        features = []
         if (self.load_loc != None):
             with open(self.load_loc, "rb") as load_pkl:
                 load = pickle.load(load_pkl)
             
-            for stimuli, response, features_dict, _ in association_tuples:
+            for stimuli, response in stimuli_response:
                 stimuli_synsets = self._get_synset_names(stimuli)
                 stimuli_loads = []
                 for stimuli_synset in stimuli_synsets:
@@ -200,9 +226,9 @@ class FeatureExtractor(object):
                     #if stimuli has 0 synsets, insert a dumbie value to avoid errors
                     stimuli_loads.append(0)
                 
-                features_dict["max stimuli load"] = max(stimuli_loads)
-                features_dict["total stimuli load"] = sum(stimuli_loads)
-                features_dict["avg stimuli load"] = sum(stimuli_loads)/len(stimuli_loads)
+                max_stim_load = max(stimuli_loads)
+                total_stim_load = sum(stimuli_loads)
+                avg_stim_load = np.mean(stimuli_loads)
                 
                 response_synsets = self._get_synset_names(response)
                 response_loads = []
@@ -212,50 +238,60 @@ class FeatureExtractor(object):
                     #if response has 0 synsets, insert a dumbie value to avoid errors
                     response_loads.append(0)
                 
-                features_dict["max response load"] = max(response_loads)
-                features_dict["total response load"] = sum(response_loads)
-                features_dict["avg response load"] = sum(response_loads)/len(response_loads)
+                max_resp_load = max(response_loads)
+                total_resp_load = sum(response_loads)
+                avg_resp_load = np.mean(response_loads)
+                
+                features.append((max_stim_load, max_resp_load,
+                                 total_stim_load, total_resp_load,
+                                 avg_stim_load, avg_resp_load
+                                 ))
             
             del load #clear from memory
         
         else:
             warnings.warn("No Load Centrality location specified. Returning blank features")
+            features = [[] * len(stimuli_response)]
         
-        return association_tuples
+        return np.vstack(features)
     
-    def _add_dir_rel(self,association_tuples, verbose=True):
+    def get_dir_rel(self,stimuli_response, verbose=True):
 #         if (self.wordnetgraph_loc != None):
 #             with open(self.wordnetgraph_loc, "rb") as wordnetgraph_pkl:
 #                 wn_graph = pickle.load(wordnetgraph_pkl)
         wn_graph = WordNetGraph()
+        features =[]
         
-        processed = 0
-        total = len(association_tuples)
-        for stimuli, response, features_dict, _ in association_tuples:
+        total = len(stimuli_response)
+        for stimuli, response in stimuli_response:
             stimuli_synsets = self._get_synset_names(stimuli)
             response_synsets = self._get_synset_names(response)
             
-            features_dict["dirrel"] = wn_graph.get_directional_relativity(stimuli_synsets,response_synsets)
+            dirrel = wn_graph.get_directional_relativity(stimuli_synsets,response_synsets)
+            features.append(dirrel)
             
-            processed += 1
-            if verbose and (processed % 500 == 0):
-                print("{}/{} done".format(processed, total))
+            if verbose and (len(features) % 500 == 0):
+                print("{}/{} done".format(len(features), total))
         
         del wn_graph #clear from memory
     
 #         else:
 #             warnings.warn("No WordNetGraph location specified. Returning blank features")
         
-        return association_tuples
+        return np.vstack(features)
     
-    def _add_w2g_feats(self,association_tuples):
+    def get_w2g_feats(self,stimuli_response):
+        features=[]
+        
         if (self.w2g_model_loc != None) and (self.w2g_vocab_loc!=None):
             voc = Vocabulary.load(self.w2g_vocab_loc)
             w2g = GaussianEmbedding.load(self.w2g_model_loc)
 #             import sys;sys.path.append(r'/mnt/c/Users/Andrew/.p2/pool/plugins/org.python.pydev_6.2.0.201711281614/pysrc')
 #             import pydevd;pydevd.settrace()
             
-            for stimuli, response, features_dict, _ in association_tuples:
+            for stimuli, response in stimuli_response:
+#                 stimuli = stimuli.encode()
+#                 response= response.encode()
                 #treat stimuli/response a document and let the vocab tokenize it. This way we can capture higher order ngrams
                 stimuli_tokens = voc.tokenize(self._underscore_to_space(stimuli))
                 response_tokens = voc.tokenize(self._underscore_to_space(response))
@@ -280,19 +316,22 @@ class FeatureExtractor(object):
                 if (stimuli_id!=None) and (response_id!=None):
                     energy = w2g.energy(stimuli_id, response_id)
                     
-                features_dict["w2g energy"] = -energy#energy is -KL, so -1x to make it normal KL
-                features_dict["w2g sim"] = sim
-                features_dict["w2g offset"] = offset
+                w2g_energy = -energy #energy is -KL, so -1x to make it normal KL
+                w2g_sim = sim
+                w2g_offset = offset
+                features.append(np.hstack((w2g_energy,w2g_sim,w2g_offset)))
             
             del w2g #clear from memory
             del voc
         
         else:
             warnings.warn("One or more of w2g_model_loc or w2g_vocab_loc is unspecified. Returning blank features")
+            features = [[] * len(stimuli_response)]
         
-        return association_tuples
+        return np.vstack(features)
     
-    def _add_wn_feats(self,association_tuples, verbose = True):
+    def get_wn_feats(self,stimuli_response, verbose = True):
+        features=[]
         wnu = WordNetUtils(cache=True)
 #         el=None
 #         if (self.lesk_relations != None):
@@ -300,13 +339,13 @@ class FeatureExtractor(object):
 #         else:
 #             warnings.warn("No lesk relation file location specified. Returning blank features")
             
-        processed = 0
-        total = len(association_tuples)
-        for stimuli, response, features_dict, _ in association_tuples:
+        total = len(stimuli_response)
+        for stimuli, response in stimuli_response:
             stimuli_synsets = self._get_synsets(stimuli)
             response_synsets = self._get_synsets(response)
-            features_dict["stimuli lexvector"] = wnu.get_lex_vector(stimuli_synsets)
-            features_dict["response lexvector"] = wnu.get_lex_vector(response_synsets)
+            
+            stim_lexvector = wnu.get_lex_vector(stimuli_synsets)
+            resp_lexvector = wnu.get_lex_vector(response_synsets)
             
             wup_sims = []
             path_sims = []
@@ -318,50 +357,58 @@ class FeatureExtractor(object):
                     lch_sims.append(wnu.modified_lch_similarity_w_root(synset1, synset2))
             
             if len(wup_sims) == 0:
-                wup_sims.append(nan)
+                wup_sims.append(np.nan)
             if len(path_sims) == 0:
-                path_sims.append(nan)
+                path_sims.append(np.nan)
             if len(lch_sims) == 0:
-                lch_sims.append(nan)
+                lch_sims.append(np.nan)
             
-            features_dict["wup max"] = max(wup_sims)
-            features_dict["wup avg"] = sum(wup_sims)/len(wup_sims)
-            features_dict["path max"] = max(path_sims)
-            features_dict["path avg"] = sum(path_sims)/len(path_sims)
-            features_dict["lch max"] = max(lch_sims)
-            features_dict["lch avg"] = sum(lch_sims)/len(lch_sims)
+            wup_max = max(wup_sims)
+            wup_avg = np.mean(wup_sims)
+            path_max = max(path_sims)
+            path_avg = np.mean(path_sims)
+            lch_max = max(lch_sims)
+            lch_avg = np.mean(lch_sims)
             
-            processed+=1
-            if verbose and (processed % 500 == 0):
-                print("{}/{} done".format(processed, total))
+            features.append(np.hstack((stim_lexvector, resp_lexvector,
+                                       wup_max, wup_avg,
+                                       path_max, path_avg,
+                                       lch_max, lch_avg
+                                       )))
+            
+            if verbose and (len(features) % 500 == 0):
+                print("{}/{} done".format(len(features), total))
         
         del wnu
         
-        return association_tuples
+        return np.vstack(features)
     
-    def _add_extended_lesk_feats(self, association_tuples, verbose=True):
+    def get_extended_lesk_feats(self, stimuli_response, verbose=True):
+        features = []
+        
         if (self.lesk_relations != None):
-            el = ExtendedLesk(self.lesk_relations, cache=True) #doesn't matter if we cache since we deleted it when we're done.
+            el = ExtendedLesk(self.lesk_relations, cache=True) #doesn't matter if we cache since we deleted it when we're done.d
             
-            processed = 0
-            total = len(association_tuples)
-            for stimuli, response, features_dict, _ in association_tuples:
+            total = len(stimuli_response)
+            for stimuli, response in stimuli_response:
                 #don't need to sanitize stimuli and response since I'm looking them up in wordnet anyway
-                features_dict["extended lesk"] = el.getWordRelatedness(stimuli, response)
+                extended_lesk = el.getWordRelatedness(stimuli, response)
+                
+                features.append(extended_lesk)
             
-                processed+=1
-                if verbose and (processed % 500 == 0):
-                    print("{}/{} done".format(processed, total))
+                if verbose and (len(features) % 500 == 0):
+                    print("{}/{} done".format(len(features), total))
             
             del el #clear from memory
         
         else:
             warnings.warn("No lesk relation file location specified. Returning blank features")
+            features = [[] * len(stimuli_response)]
         
-        return association_tuples
+        return np.vstack(features)
     
-    def get_features(self,stimuli_response_strength,full_dir):
-        association_tuples = [ (stimuli.lower(), response.lower(), {}, strength) for stimuli, response, strength in stimuli_response_strength]
+    def transform(self, stimuli_response):
+        stimuli_response = [ (stimuli.lower(), response.lower()) for stimuli, response in stimuli_response]
 #         association_tuples = []
 #         synset_map = {}
 #         synset_name_map = {}
@@ -371,95 +418,99 @@ class FeatureExtractor(object):
 #             association_tuples.append( (stimuli.lower(), response.lower(), {}, strength))
 #             if 
         
-        import random
-        random.seed(10)
-        random.shuffle(association_tuples)
-
-        strengths=[]
-        word_pairs = []
-        for stim,resp,feat_dict,strength in association_tuples:
-            strengths.append(strength)
-            word_pairs.append((stim,resp))
-
-        strengths=vstack(strengths).astype(float32)
-        strengths=strengths.reshape((strengths.shape[0],1))
-
-        with open(os.path.join(full_dir, "strengths.pkl"), "wb") as strength_file:
-            pickle.dump(strengths, strength_file)
-        print("strengths saved")
-        with open(os.path.join(full_dir, "word_pairs.pkl"), "wb") as strength_file:
-            pickle.dump(word_pairs, strength_file)
-        print("word pairs saved")
-               
-        association_tuples = self._add_lda_feats(association_tuples)
+#         import random
+#         random.seed(10)
+#         random.shuffle(association_tuples)
+# 
+#         strengths=[]
+#         word_pairs = []
+#         for stimuli,responce in stimuli_response:
+#             strengths.append(strength)
+#             word_pairs.append((stim,resp))
+# 
+#         strengths=vstack(strengths).astype(float32)
+#         strengths=strengths.reshape((strengths.shape[0],1))
+# 
+#         with open(os.path.join(self.full_dir, "strengths.pkl"), "wb") as strength_file:
+#             pickle.dump(strengths, strength_file)
+#         print("strengths saved")
+#         with open(os.path.join(self.full_dir, "word_pairs.pkl"), "wb") as strength_file:
+#             pickle.dump(word_pairs, strength_file)
+#         print("word pairs saved")
+        
+        features = []
+        
+        features.append(self.get_lda_feats(stimuli_response))
         print("lda done")
    
-        writePickle(association_tuples, full_dir)
+#         writePickle(association_tuples, self.full_dir)
    
-        association_tuples = self._add_wn_betweenness(association_tuples)
+        features.append(self.get_wn_betweenness(stimuli_response))
         print("betweenness done")
    
-        writePickle(association_tuples, full_dir)
+#         writePickle(association_tuples, self.full_dir)
    
-        association_tuples = self._add_wn_load(association_tuples)
+        features.append(self.get_wn_load(stimuli_response))
         print("load done")
               
-        writePickle(association_tuples, full_dir)
+#         writePickle(association_tuples, self.full_dir)
            
-        association_tuples = self._add_w2v_feats(association_tuples)
+        features.append(self.get_w2v_feats(stimuli_response))
         print("w2v done")
    
-        writePickle(association_tuples, full_dir)
+#         writePickle(association_tuples, self.full_dir)
                
-        association_tuples = self._add_glove_feats(association_tuples)
+        features.append(self.get_glove_feats(stimuli_response))
         print("glove done")
    
-        writePickle(association_tuples, full_dir)
+#         writePickle(association_tuples, self.full_dir)
            
-        association_tuples = self._add_autoex_feats(association_tuples)
+        features.append(self.get_autoex_feats(stimuli_response))
         print("autoex done")
    
-        writePickle(association_tuples, full_dir)
+#         writePickle(association_tuples, self.full_dir)
            
-        association_tuples = self._add_dir_rel(association_tuples)
+        features.append(self.get_dir_rel(stimuli_response))
         print("dirrels done")
   
-        writePickle(association_tuples, full_dir)
+#         writePickle(association_tuples, self.full_dir)
            
-        association_tuples = self._add_wn_feats(association_tuples)
+        features.append(self.get_wn_feats(stimuli_response))
         print("wordnet feats done")
    
-        writePickle(association_tuples, full_dir)
+#         writePickle(association_tuples, self.full_dir)
           
-        association_tuples = self._add_w2g_feats(association_tuples)
+        features.append(self.get_w2g_feats(stimuli_response))
         print("w2g done")
    
-        writePickle(association_tuples, full_dir)
+#         writePickle(association_tuples, self.full_dir)
           
-        association_tuples = self._add_extended_lesk_feats(association_tuples)
+        features.append(self.get_extended_lesk_feats(stimuli_response))
         print("extended lesk done")
   
-        writePickle(association_tuples, full_dir)
-                   
-        return association_tuples
+#         writePickle(association_tuples, self.full_dir)
+        
+        #TODO: include [selective] feature scaling?
+        
+        return np.hstack(features)
 
-def writePickle(association_tuples, full_dir):
-    #deletes features after writing them
-    feat_dicts = []
-    for _, _, feat_dict, _ in association_tuples:
-        feat_dicts.append(feat_dict)
-    feats = feat_dicts[0].keys()
-    for feat in feats:
-        feat_vect = []
-        for feat_dict in feat_dicts:
-            val = feat_dict[feat]
-            if ("lexvector" not in feat) and ("offset" not in feat) and ((val == inf) or (val ==-inf)):
-                val = 0
-            feat_vect.append(val)
-            del feat_dict[feat]
-        feat_vect =nan_to_num(vstack(feat_vect).astype(float32))
-    
-        with open(os.path.join(full_dir, "{}.pkl".format(feat)), "wb") as feat_file:
-            pickle.dump(feat_vect, feat_file)
-        print("{} done: {}".format(feat, feat_vect.shape))
+# def writePickle(association_tuples, full_dir):
+#     #deletes features after writing them
+#     feat_dicts = []
+#     for _, _, feat_dict, _ in association_tuples:
+#         feat_dicts.append(feat_dict)
+#     feats = feat_dicts[0].keys()
+#     for feat in feats:
+#         feat_vect = []
+#         for feat_dict in feat_dicts:
+#             val = feat_dict[feat]
+#             if ("lexvector" not in feat) and ("offset" not in feat) and ((val == np.inf) or (val ==-np.inf)):
+#                 val = 0
+#             feat_vect.append(val)
+#             del feat_dict[feat]
+#         feat_vect =np.nan_to_num(np.vstack(feat_vect).astype(np.float32))
+#     
+#         with open(os.path.join(full_dir, "{}.pkl".format(feat)), "wb") as feat_file:
+#             pickle.dump(feat_vect, feat_file)
+#         print("{} done: {}".format(feat, feat_vect.shape))
 

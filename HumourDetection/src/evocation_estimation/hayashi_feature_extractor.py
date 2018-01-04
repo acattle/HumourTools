@@ -8,18 +8,17 @@ import pickle
 from lda_vector import LDAVectorizer
 from autoextend import AutoExtendEmbeddings
 from wordnet_graph import WordNetGraph
-from numpy import hstack, zeros, float32, empty, vstack, nan
 import numpy as np
 from nltk.corpus import wordnet
 import warnings
 from wordnet_utils import WordNetUtils
-import re
-from scipy.spatial.distance import cosine
 from util.gensim_wrappers.gensim_vector_models import load_gensim_vector_model
+from util.model_name_consts import AUTOEXTEND, GOOGLE_W2V, WIKIPEDIA_LDA,\
+    WIKIPEDIA_TFIDF
+from sklearn.base import TransformerMixin
 
 
-class HayashiFeatureExtractor(object):
-    def __init__(self, lda_loc=None, wordids_loc=None, tfidf_loc=None, w2v_loc=None, autoex_loc=None, betweenness_loc=None, load_loc=None, wordnetgraph_loc=None, glove_loc=None, w2g_model_loc=None, w2g_vocab_loc=None, dtype=float32):
+class HayashiFeatureExtractor(TransformerMixin):
     def __init__(self, lda_loc=None, wordids_loc=None, tfidf_loc=None, w2v_loc=None, autoex_loc=None, betweenness_loc=None, load_loc=None, wordnetgraph_loc=None, glove_loc=None, w2g_model_loc=None, w2g_vocab_loc=None, dtype=np.float32):
         self.lda_loc = lda_loc
         self.wordids_loc = wordids_loc
@@ -49,24 +48,27 @@ class HayashiFeatureExtractor(object):
     
     
     def _get_synset(self,word):
-        return wordnet.synset(re.sub(" ", "_",word))
+        return wordnet.synset(word)
     
     def _get_name(self,word):
         return word.split(".", 1)[0]
     
-    def _space_to_underscore(self, word):
-        return re.sub(" ", "_",word)
+#     def _space_to_underscore(self, word):
+#         return re.sub(" ", "_",word)
     
-    def _add_lda_feats(self,association_tuples, verbose=True):
+    def get_lda_feats(self, stimuli_response, verbose=True):
+        features=[]
         if (self.lda_loc != None) and (self.wordids_loc!=None) and(self.tfidf_loc!=None):
             lda = LDAVectorizer(self.lda_loc, self.wordids_loc, self.tfidf_loc)
             
             processed = 0
-            total = len(association_tuples)
-            for stimuli, response, features_dict, _ in association_tuples:
+            total = len(stimuli_response)
+            for stimuli, response in stimuli_response:
                 stim_word = self._get_name(stimuli)
                 resp_word = self._get_name(response)
-                features_dict["lda sim"]=lda.get_similarity(stim_word, resp_word)
+                lda_sim=lda.get_similarity(stim_word, resp_word)
+                
+                features.append(lda_sim)
                 
                 processed += 1
                 if verbose and (processed % 500 == 0):
@@ -76,31 +78,35 @@ class HayashiFeatureExtractor(object):
         
         else:
             warnings.warn("One or more of lda_loc, wordids_loc, or tfidf_loc is unspecified. Returning blank features")
+            features = [[] * len(stimuli_response)]
         
-        return association_tuples
+        return np.vstack(features)
     
-    def _add_w2v_feats(self,association_tuples):
+    def get_w2v_feats(self, stimuli_response):
+        features = []
         if (self.w2v_loc != None):
             w2v = load_gensim_vector_model(GOOGLE_W2V, self.w2v_loc)
             
-            for stimuli, response, features_dict, _ in association_tuples:
+            for stimuli, response in stimuli_response:
                 stim_word = self._get_name(stimuli)
                 resp_word = self._get_name(response)
-                features_dict["w2v sim"] = w2v.get_similarity(stim_word, resp_word)
+                w2v_sim = w2v.get_similarity(stim_word, resp_word)
 #                 features_dict["w2v offset"] = w2v.get_vector(stim_word) - w2v.get_vector(resp_word)
                 
-            del w2v #clear from memory
+                features.append(w2v_sim)
+#             del w2v #clear from memory
         
         else:
             warnings.warn("No word2vec location specified. Returning blank features")
+            features = [[] * len(stimuli_response)]
         
-        return association_tuples
+        return np.vstack(features)
     
-#     def _add_glove_feats(self,association_tuples):
+#     def get_glove_feats(self, stimuli_response):
 #         if (self.glove_loc != None):
 #             glove = GoogleWord2Vec(self.glove_loc, True) #https://radimrehurek.com/gensim/scripts/glove2word2vec.html
 #             
-#             for stimuli, response, features_dict, _ in association_tuples:
+#             for stimuli, response in stimuli_response:
 #                 santized_stimuli = self._space_to_underscore(stimuli)
 #                 santized_response = self._space_to_underscore(response)
 #                 features_dict["glove sim"] = glove.get_similarity(santized_stimuli, santized_response)
@@ -111,79 +117,93 @@ class HayashiFeatureExtractor(object):
 #         else:
 #             warnings.warn("No GloVe location specified. Returning blank features")
 #         
-#         return association_tuples
+#         return np.vstack(features)
     
-    def _add_autoex_feats(self,association_tuples):
+    def get_autoex_feats(self, stimuli_response):
+        features = []
         if (self.autoex_loc != None):
 #             with open(self.autoex_loc, "rb") as autoex_pkl:
 #                 autoex = pickle.load(autoex_pkl)
             autoex = load_gensim_vector_model(AUTOEXTEND, self.autoex_loc, True)
             
-            for stimuli, response, features_dict, _ in association_tuples:
-                features_dict["autoex sim mapped"] = autoex.get_similarity(stimuli, response)
-                features_dict["autoex offset mapped"] = autoex.get_vector(stimuli) - autoex.get_vector(response)
+            for stimuli, response in stimuli_response:
+                autoex_sim = autoex.get_similarity(stimuli, response)
+                autoex_offset = autoex.get_vector(stimuli) - autoex.get_vector(response)
                 
-            del autoex #clear from memory
+                features.append((autoex_sim, autoex_offset))
+#             del autoex #clear from memory
         
         else:
             warnings.warn("No AutoEx location specified. Returning blank features")
+            features = [[] * len(stimuli_response)]
         
-        return association_tuples
+        return np.vstack(features)
     
-    def _add_wn_betweenness(self,association_tuples):
+    def get_wn_betweenness(self, stimuli_response):
+        features = []
         if (self.betweenness_loc != None):
             with open(self.betweenness_loc, "rb") as betweeneness_pkl:
                 betweenness = pickle.load(betweeneness_pkl)
             
-            for stimuli, response, features_dict, _ in association_tuples:
-                features_dict["stimuli betweenness"] = betweenness.get(stimuli,0.0)
-                features_dict["response betweenness"] = betweenness.get(response,0.0)
+            for stimuli, response in stimuli_response:
+                stim_betweenness = betweenness.get(stimuli,0.0)
+                resp_betweenness = betweenness.get(response,0.0)
+                
+                features.append((stim_betweenness,resp_betweenness))
             
             del betweenness #clear from memory
         
         else:
             warnings.warn("No Betweenness Centrality location specified. Returning blank features")
+            features = [[] * len(stimuli_response)]
         
-        return association_tuples
+        return np.vstack(features)
     
-    def _add_wn_load(self,association_tuples):
+    def get_wn_load(self, stimuli_response):
+        features = []
         if (self.load_loc != None):
             with open(self.load_loc, "rb") as load_pkl:
                 load = pickle.load(load_pkl)
             
-            for stimuli, response, features_dict, _ in association_tuples:
-                features_dict["stimuli load"] = load.get(stimuli,0.0)
-                features_dict["response load"] = load.get(response,0.0)
+            for stimuli, response in stimuli_response:
+                stim_load = load.get(stimuli,0.0)
+                resp_load = load.get(response,0.0)
+                
+                features.append((stim_load, resp_load))
             
             del load #clear from memory
         
         else:
             warnings.warn("No Load Centrality location specified. Returning blank features")
+            features = [[] * len(stimuli_response)]
         
-        return association_tuples
+        return np.vstack(features)
     
-    def _add_dir_rel(self,association_tuples):
+    def get_dir_rel(self, stimuli_response):
 #         if (self.wordnetgraph_loc != None):
 #             with open(self.wordnetgraph_loc, "rb") as wordnetgraph_pkl:
 #                 wn_graph = pickle.load(wordnetgraph_pkl)
+        features = []
         wn_graph = WordNetGraph()
         
-        for stimuli, response, features_dict, _ in association_tuples:
-            features_dict["dirrel"] = wn_graph.get_directional_relativity([stimuli],[response])
+        for stimuli, response in stimuli_response:
+            dirrel = wn_graph.get_directional_relativity([stimuli],[response])
+            
+            features.append(dirrel)
         
         del wn_graph #clear from memory
         
 #         else:
 #             warnings.warn("No WordNetGraph location specified. Returning blank features")
         
-        return association_tuples
+        return np.vstack(features)
     
-#     def _add_w2g_feats(self,association_tuples):
+#     def get_w2g_feats(self, stimuli_response):
 #         if (self.w2g_model_loc != None) and (self.w2g_vocab_loc!=None):
 #             voc = Vocabulary.load(self.w2g_vocab_loc)
 #             w2g = GaussianEmbedding.load(self.w2g_model_loc)
 #             
-#             for stimuli, response, features_dict, _ in association_tuples:
+#             for stimuli, response in stimuli_response:
 #                 santized_stimuli = self._space_to_underscore(stimuli)
 #                 santized_response = self._space_to_underscore(response)
 #                 stimuli_id=None
@@ -214,59 +234,60 @@ class HayashiFeatureExtractor(object):
 #         else:
 #             warnings.warn("One or more of w2g_model_loc or w2g_vocab_loc is unspecified. Returning blank features")
 #         
-#         return association_tuples
+#         return np.vstack(features)
     
-    def _add_wn_feats(self,association_tuples, verbose = True):
+    def get_wn_feats(self, stimuli_response, verbose = True):
+        features = []
         wnu = WordNetUtils(cache=True)
         
-        processed = 0
-        total = len(association_tuples)
-        for stimuli, response, features_dict, _ in association_tuples:
+        total = len(stimuli_response)
+        for stimuli, response in stimuli_response:
             stimuli_synset = self._get_synset(stimuli)
             response_synset = self._get_synset(response)
-            features_dict["stimuli lexvector"] = wnu.get_lex_vector([stimuli_synset])
-            features_dict["response lexvector"] = wnu.get_lex_vector([response_synset])
             
+            stim_lexvector = wnu.get_lex_vector([stimuli_synset])
+            resp_lexvector = wnu.get_lex_vector([response_synset])
             wup_sim = wnu.wup_similarity_w_root(stimuli_synset, response_synset)
             
+            features.append((stim_lexvector, resp_lexvector, wup_sim))
             
-            features_dict["wup"] = wup_sim
-            processed+=1
-            if verbose and (processed % 500 == 0):
-                print("{}/{} done".format(processed, total))
+            if verbose and (len(features) % 500 == 0):
+                print("{}/{} done".format(len(features), total))
         
         del wnu
         
-        return association_tuples
+        return np.vstack(features)
     
-    def get_features(self,stimuli_response_strength):
-        association_tuples = [ (stimuli.lower(), response.lower(), {}, strength) for stimuli, response, strength in stimuli_response_strength]
+    def transform(self,stimuli_response):
+        association_tuples = [ (stimuli.lower(), response.lower()) for stimuli, response in stimuli_response]
         
-        association_tuples = self._add_lda_feats(association_tuples)
+        features = []
+        
+        features.append(self.get_lda_feats(association_tuples))
         print("lda done")
                        
-        association_tuples = self._add_w2v_feats(association_tuples)
+        features.append(self.get_w2v_feats(association_tuples))
         print("w2v done")
                
-#         association_tuples = self._add_glove_feats(association_tuples)
+#         features.append(self.get_glove_feats(association_tuples))
 #         print("glove done")
          
-        association_tuples = self._add_autoex_feats(association_tuples)
+        features.append(self.get_autoex_feats(association_tuples))
         print("autoex done")
           
-        association_tuples = self._add_wn_betweenness(association_tuples)
+        features.append(self.get_wn_betweenness(association_tuples))
         print("betweenness done")
               
-        association_tuples = self._add_wn_load(association_tuples)
+        features.append(self.get_wn_load(association_tuples))
         print("load done")
               
-        association_tuples = self._add_dir_rel(association_tuples)
+        features.append(self.get_dir_rel(association_tuples))
         print("dirrels done")
           
-        association_tuples = self._add_wn_feats(association_tuples)
+        features.append(self.get_wn_feats(association_tuples))
         print("wordnet feats done")
         
-#         association_tuples = self._add_w2g_feats(association_tuples)
+#         features.append(self.get_w2g_feats(association_tuples))
 #         print("w2g done")
                    
-        return association_tuples
+        return np.hstack(features)
