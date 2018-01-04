@@ -6,16 +6,15 @@ Created on Jan 27, 2017
 from __future__ import print_function, division #for Python 2.7 compatibility
 import pickle
 from lda_vector import LDAVectorizer
-from autoextend import AutoExtendEmbeddings
-from wordnet_graph import WordNetGraph
 import numpy as np
 from nltk.corpus import wordnet
 import warnings
-from wordnet_utils import WordNetUtils
 from util.gensim_wrappers.gensim_vector_models import load_gensim_vector_model
 from util.model_name_consts import AUTOEXTEND, GOOGLE_W2V, WIKIPEDIA_LDA,\
     WIKIPEDIA_TFIDF
 from sklearn.base import TransformerMixin
+from util.wordnet.wordnet_graph import WordNetGraph
+from util.wordnet.wordnet_utils import WordNetUtils
 
 
 class HayashiFeatureExtractor(TransformerMixin):

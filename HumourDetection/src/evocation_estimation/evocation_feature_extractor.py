@@ -6,14 +6,11 @@ Created on Jan 27, 2017
 from __future__ import print_function, division #for Python 2.7 compatibility
 import pickle
 from lda_vector import LDAVectorizer
-from autoextend import AutoExtendEmbeddings
-from wordnet_graph import WordNetGraph
 import numpy as np
 from nltk.corpus import wordnet as wn
 import warnings
 from vocab import Vocabulary
 from word2gauss import GaussianEmbedding
-from wordnet_utils import WordNetUtils
 import re
 # import os
 from extended_lesk import ExtendedLesk
@@ -22,6 +19,8 @@ from util.model_name_consts import STANFORD_GLOVE, GOOGLE_W2V, AUTOEXTEND,\
     WIKIPEDIA_LDA, WIKIPEDIA_TFIDF
 from scipy.spatial.distance import cosine
 from sklearn.base import TransformerMixin
+from util.wordnet.wordnet_graph import WordNetGraph
+from util.wordnet.wordnet_utils import WordNetUtils
 
 
 class EvocationFeatureExtractor(TransformerMixin):

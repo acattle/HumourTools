@@ -8,13 +8,13 @@ from lda_vector import LDAVectorizer
 import pickle
 from numpy import vstack, float32, hstack
 import os
-from google_word2vec import GoogleWord2Vec
 import re
 from vocab import Vocabulary
 from word2gauss import GaussianEmbedding
 from util.gensim_wrappers.gensim_vector_models import load_gensim_vector_model
 from util.model_name_consts import GOOGLE_W2V, STANFORD_GLOVE, AUTOEXTEND,\
     WIKIPEDIA_LDA, WIKIPEDIA_TFIDF
+from util.gensim_wrappers.gensim_docsum_models import load_gensim_docsum_model
 
 lda_loc="/mnt/c/vectors/lda_prep_no_lemma/no_lemma.101.lda"
 wordids_loc="/mnt/c/vectors/lda_prep_no_lemma/lda_no_lemma_wordids.txt.bz2"

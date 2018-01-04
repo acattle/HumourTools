@@ -4,7 +4,7 @@ Created on Apr 8, 2017
 @author: Andrew
 '''
 from __future__ import print_function #for Python 2.7 compatibility
-from evocation_reader import EATGraph, USFGraph,EvocationDataset
+from evocation_reader import EvocationDataset
 from hayashi_feature_extractor import HayashiFeatureExtractor
 from numpy import float32
 import pickle
