@@ -10,6 +10,7 @@ from google_word2vec import GoogleWord2Vec
 from autoextend import AutoExtendEmbeddings
 from wordnet_graph import WordNetGraph
 from numpy import hstack, zeros, float32, empty, vstack, nan,nan_to_num,inf
+import numpy as np
 from nltk.corpus import wordnet as wn
 import warnings
 from vocab import Vocabulary
@@ -17,12 +18,15 @@ from word2gauss import GaussianEmbedding
 from wordnet_utils import WordNetUtils
 import re
 from scipy.spatial.distance import cosine
-import os
+# import os
 from extended_lesk import ExtendedLesk
+from util.gensim_wrappers.gensim_vector_models import load_gensim_vector_model
+from util.model_name_consts import STANFORD_GLOVE, GOOGLE_W2V, AUTOEXTEND,\
+    WIKIPEDIA_LDA, WIKIPEDIA_TFIDF
 
 
 class FeatureExtractor(object):
-    def __init__(self, lda_loc=None, wordids_loc=None, tfidf_loc=None, w2v_loc=None, autoex_loc=None, betweenness_loc=None, load_loc=None, wordnetgraph_loc=None, glove_loc=None, w2g_model_loc=None, w2g_vocab_loc=None, lesk_relations=None, dtype=float32):
+    def __init__(self, lda_loc=None, wordids_loc=None, tfidf_loc=None, w2v_loc=None, autoex_loc=None, betweenness_loc=None, load_loc=None, wordnetgraph_loc=None, glove_loc=None, w2g_model_loc=None, w2g_vocab_loc=None, lesk_relations=None, dtype=np.float32, full_dir=""):
         self.lda_loc = lda_loc
         self.wordids_loc = wordids_loc
         self.tfidf_loc = tfidf_loc
@@ -84,7 +88,7 @@ class FeatureExtractor(object):
     
     def _add_w2v_feats(self,association_tuples):
         if (self.w2v_loc != None):
-            w2v = GoogleWord2Vec(self.w2v_loc)
+            w2v = load_gensim_vector_model(GOOGLE_W2V, self.w2v_loc)
             
             for stimuli, response, features_dict, _ in association_tuples:
                 santized_stimuli = self._space_to_underscore(stimuli)
@@ -92,7 +96,7 @@ class FeatureExtractor(object):
                 features_dict["w2v sim"] = w2v.get_similarity(santized_stimuli, santized_response)
                 features_dict["w2v offset"] = w2v.get_vector(santized_stimuli) - w2v.get_vector(santized_response)
                 
-            del w2v #clear from memory
+            w2v._purge_model() #free up memory. We can reload it from disk if needed
         
         else:
             warnings.warn("No word2vec location specified. Returning blank features")
@@ -101,7 +105,7 @@ class FeatureExtractor(object):
     
     def _add_glove_feats(self,association_tuples):
         if (self.glove_loc != None):
-            glove = GoogleWord2Vec(self.glove_loc, True) #https://radimrehurek.com/gensim/scripts/glove2word2vec.html
+            glove = load_gensim_vector_model(STANFORD_GLOVE, self.glove_loc, True) #https://radimrehurek.com/gensim/scripts/glove2word2vec.html
             
             for stimuli, response, features_dict, _ in association_tuples:
                 santized_stimuli = self._space_to_underscore(stimuli)
@@ -109,7 +113,7 @@ class FeatureExtractor(object):
                 features_dict["glove sim"] = glove.get_similarity(santized_stimuli, santized_response)
                 features_dict["glove offset"] = glove.get_vector(santized_stimuli) - glove.get_vector(santized_response)
             
-            del glove #clear from memory
+            glove._purge_model() #free up memory. We can reload it from disk if needed
         
         else:
             warnings.warn("No GloVe location specified. Returning blank features")
@@ -120,7 +124,7 @@ class FeatureExtractor(object):
         if (self.autoex_loc != None):
 #             with open(self.autoex_loc, "rb") as autoex_pkl:
 #                 autoex = pickle.load(autoex_pkl)
-            autoex = GoogleWord2Vec(self.autoex_loc, True)
+            autoex = load_gensim_vector_model(AUTOEXTEND, self.autoex_loc, True)
             
             for stimuli, response, features_dict, _ in association_tuples:
                 stimuli_synsets = self._get_synset_names(stimuli)
@@ -138,7 +142,7 @@ class FeatureExtractor(object):
                 features_dict["max autoex sim"] = max(synset_sims)
                 features_dict["avg autoex sim"] = sum(synset_sims)/len(synset_sims)
             
-            del autoex #clear from memory
+            autoex._purge_model() #free up memory. We can reload it from disk if needed
         
         else:
             warnings.warn("No AutoEx location specified. Returning blank features")

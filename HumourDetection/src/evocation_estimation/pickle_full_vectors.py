@@ -12,6 +12,9 @@ from google_word2vec import GoogleWord2Vec
 import re
 from vocab import Vocabulary
 from word2gauss import GaussianEmbedding
+from util.gensim_wrappers.gensim_vector_models import load_gensim_vector_model
+from util.model_name_consts import GOOGLE_W2V, STANFORD_GLOVE, AUTOEXTEND,\
+    WIKIPEDIA_LDA, WIKIPEDIA_TFIDF
 
 lda_loc="/mnt/c/vectors/lda_prep_no_lemma/no_lemma.101.lda"
 wordids_loc="/mnt/c/vectors/lda_prep_no_lemma/lda_no_lemma_wordids.txt.bz2"
@@ -66,7 +69,7 @@ for dataset in datasets:
 del lda
 
 print("w2v")
-w2v = GoogleWord2Vec(w2v_loc)
+w2v = load_gensim_vector_model(GOOGLE_W2V,w2v_loc)
 for dataset in datasets:
     word_pairs = load_word_pairs(os.path.join(feature_folder, dataset))
     
@@ -85,7 +88,7 @@ for dataset in datasets:
 del w2v
 
 print("glove")
-glove = GoogleWord2Vec(glove_loc, True)
+glove = load_gensim_vector_model(STANFORD_GLOVE, glove_loc, True)
 for dataset in datasets:
     word_pairs = load_word_pairs(os.path.join(feature_folder, dataset))
      
@@ -104,7 +107,7 @@ for dataset in datasets:
 del glove
 
 print("autoex")
-autoex = GoogleWord2Vec(autoex_loc, True)
+autoex = load_gensim_vector_model(AUTOEXTEND, autoex_loc, True)
 for dataset in datasets:
     word_pairs = load_word_pairs(os.path.join(feature_folder, dataset))
      

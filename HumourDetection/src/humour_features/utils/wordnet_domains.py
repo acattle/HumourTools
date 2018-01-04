@@ -19,7 +19,7 @@ class WordNetDomains():
             
             As the official WordNet Domains file uses WordNet 2.0 synsets, this
             class requires the unoffical WordNet 3.0-mapped
-            lifted-wordnet-domains, availavle at:
+            lifted-wordnet-domains, available at:
             
                 https://github.com/morungos/lifted-wordnet-domains
             

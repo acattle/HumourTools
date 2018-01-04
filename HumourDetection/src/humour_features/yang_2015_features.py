@@ -15,12 +15,13 @@ from nltk.corpus import wordnet as wn
 import numpy as np
 from math import log
 from itertools import combinations, product
-from evocation_estimation.google_word2vec import GoogleWord2Vec
 from sklearn.base import TransformerMixin
 from sklearn.exceptions import NotFittedError
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.neighbors import NearestNeighbors
 from humour_features.utils.common_features import get_alliteration_and_rhyme_features
+from util.gensim_wrapper import load_gensim_vector_model
+from util.model_name_consts import GOOGLE_W2V
 
 def _convert_pos_to_wordnet(treebank_tag):
     if treebank_tag.startswith('J'):
@@ -131,23 +132,13 @@ class YangHumourFeatureExtractor(TransformerMixin):
             Method for lazy loading Word2Vec model
             
             :return: A gensim word2vec model in a convenience wrapper
-            :rtype: GoogleWord2Vec
+            :rtype: GensimVectorModel
         """
         if self.w2v_model == None:
-            #lazy load the w2v model
-            self.w2v_model = GoogleWord2Vec(self.w2v_loc)
+            self.w2v_model = load_gensim_vector_model(GOOGLE_W2V, self.w2v_loc)
         
         return self.w2v_model
-    
-    def _purge_w2v_model(self):
-        """
-            Method for freeing memory by releasing the Word2Vec Model. Due to
-            size of Word2Vec models, it may be necessary to free up memory when
-            Woird2Vec is not in use. After calling this function, Word2Vec
-            model will need to be read into memory again before use.
-        """
-        self.w2v_model = None #This will send the Word2Vec model to garbage collection (assuming there are no other references to it)
-    
+
     def _get_wilson_lexicon(self):
         """
             Method for lazy loading Wilson et al. (2005) lexicon.

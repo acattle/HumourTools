@@ -6,19 +6,21 @@ Created on Jan 27, 2017
 from __future__ import print_function, division #for Python 2.7 compatibility
 import pickle
 from lda_vector import LDAVectorizer
-from google_word2vec import GoogleWord2Vec
 from autoextend import AutoExtendEmbeddings
 from wordnet_graph import WordNetGraph
 from numpy import hstack, zeros, float32, empty, vstack, nan
+import numpy as np
 from nltk.corpus import wordnet
 import warnings
 from wordnet_utils import WordNetUtils
 import re
 from scipy.spatial.distance import cosine
+from util.gensim_wrappers.gensim_vector_models import load_gensim_vector_model
 
 
 class HayashiFeatureExtractor(object):
     def __init__(self, lda_loc=None, wordids_loc=None, tfidf_loc=None, w2v_loc=None, autoex_loc=None, betweenness_loc=None, load_loc=None, wordnetgraph_loc=None, glove_loc=None, w2g_model_loc=None, w2g_vocab_loc=None, dtype=float32):
+    def __init__(self, lda_loc=None, wordids_loc=None, tfidf_loc=None, w2v_loc=None, autoex_loc=None, betweenness_loc=None, load_loc=None, wordnetgraph_loc=None, glove_loc=None, w2g_model_loc=None, w2g_vocab_loc=None, dtype=np.float32):
         self.lda_loc = lda_loc
         self.wordids_loc = wordids_loc
         self.tfidf_loc = tfidf_loc
@@ -79,7 +81,7 @@ class HayashiFeatureExtractor(object):
     
     def _add_w2v_feats(self,association_tuples):
         if (self.w2v_loc != None):
-            w2v = GoogleWord2Vec(self.w2v_loc)
+            w2v = load_gensim_vector_model(GOOGLE_W2V, self.w2v_loc)
             
             for stimuli, response, features_dict, _ in association_tuples:
                 stim_word = self._get_name(stimuli)
@@ -115,7 +117,7 @@ class HayashiFeatureExtractor(object):
         if (self.autoex_loc != None):
 #             with open(self.autoex_loc, "rb") as autoex_pkl:
 #                 autoex = pickle.load(autoex_pkl)
-            autoex = GoogleWord2Vec(self.autoex_loc, True)
+            autoex = load_gensim_vector_model(AUTOEXTEND, self.autoex_loc, True)
             
             for stimuli, response, features_dict, _ in association_tuples:
                 features_dict["autoex sim mapped"] = autoex.get_similarity(stimuli, response)
