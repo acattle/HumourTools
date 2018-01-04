@@ -4,7 +4,6 @@ Created on Dec 8, 2017
 @author: Andrew
 '''
 from __future__ import print_function
-from lda_vector import LDAVectorizer
 import pickle
 from numpy import vstack, float32, hstack
 import os
@@ -14,7 +13,8 @@ from word2gauss import GaussianEmbedding
 from util.gensim_wrappers.gensim_vector_models import load_gensim_vector_model
 from util.model_name_consts import GOOGLE_W2V, STANFORD_GLOVE, AUTOEXTEND,\
     WIKIPEDIA_LDA, WIKIPEDIA_TFIDF
-from util.gensim_wrappers.gensim_docsum_models import load_gensim_docsum_model
+from util.gensim_wrappers.gensim_docsum_models import load_gensim_docsum_model,\
+    TYPE_LDA
 
 lda_loc="/mnt/c/vectors/lda_prep_no_lemma/no_lemma.101.lda"
 wordids_loc="/mnt/c/vectors/lda_prep_no_lemma/lda_no_lemma_wordids.txt.bz2"
@@ -50,7 +50,7 @@ feature_folder = "features"
 datasets = ["evoc","usf","eat"]
 
 print("lda")
-lda = LDAVectorizer(lda_loc, wordids_loc, tfidf_loc, word_separator="_")
+lda = load_gensim_docsum_model(WIKIPEDIA_LDA, TYPE_LDA, lda_loc, WIKIPEDIA_TFIDF,wordids_loc, tfidf_loc, word_separator="_")
 for dataset in datasets:
     word_pairs = load_word_pairs(os.path.join(feature_folder, dataset))
      

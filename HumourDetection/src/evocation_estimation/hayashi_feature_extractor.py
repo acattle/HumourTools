@@ -5,11 +5,12 @@ Created on Jan 27, 2017
 '''
 from __future__ import print_function, division #for Python 2.7 compatibility
 import pickle
-from lda_vector import LDAVectorizer
 import numpy as np
 from nltk.corpus import wordnet
 import warnings
 from util.gensim_wrappers.gensim_vector_models import load_gensim_vector_model
+from util.gensim_wrappers.gensim_docsum_models import load_gensim_docsum_model,\
+    TYPE_LDA
 from util.model_name_consts import AUTOEXTEND, GOOGLE_W2V, WIKIPEDIA_LDA,\
     WIKIPEDIA_TFIDF
 from sklearn.base import TransformerMixin
@@ -33,7 +34,7 @@ class HayashiFeatureExtractor(TransformerMixin):
 #         self.w2g_model_loc = w2g_model_loc
 #         self.w2g_vocab_loc = w2g_vocab_loc
         
-#         self.lda = LDAVectorizer(lda_loc, wordids_loc, tfidf_loc)
+#         self.lda = GensimLDAModel(lda_loc, wordids_loc, tfidf_loc)
 #         self.word2vec = GoogleWord2Vec(w2v_loc)
 #         with open(autoex_loc, "rb") as autoex_pkl:
 #             self.autoex = pickle.load(autoex_pkl)
@@ -58,7 +59,7 @@ class HayashiFeatureExtractor(TransformerMixin):
     def get_lda_feats(self, stimuli_response, verbose=True):
         features=[]
         if (self.lda_loc != None) and (self.wordids_loc!=None) and(self.tfidf_loc!=None):
-            lda = LDAVectorizer(self.lda_loc, self.wordids_loc, self.tfidf_loc)
+            lda = load_gensim_docsum_model(WIKIPEDIA_LDA, TYPE_LDA, self.lda_loc, WIKIPEDIA_TFIDF, self.wordids_loc, self.tfidf_loc)
             
             processed = 0
             total = len(stimuli_response)
