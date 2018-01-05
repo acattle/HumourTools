@@ -197,8 +197,8 @@ class GensimTopicSumModel(object):
         """
             Summarize document according to the topic summarization model.
             
-            :param word: word to retreive vector for
-            :type word: str
+            :param document: document to retreive topic scores for
+            :type document: str
             
             :returns: the vector corresponding to word
             :rtype: np.array
