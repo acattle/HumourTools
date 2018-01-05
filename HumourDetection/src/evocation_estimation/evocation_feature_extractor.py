@@ -8,8 +8,6 @@ import pickle
 import numpy as np
 from nltk.corpus import wordnet as wn
 import warnings
-from vocab import Vocabulary
-from word2gauss import GaussianEmbedding
 import re
 # import os
 from extended_lesk import ExtendedLesk
@@ -17,11 +15,11 @@ from util.gensim_wrappers.gensim_vector_models import load_gensim_vector_model
 from util.gensim_wrappers.gensim_topicsum_models import load_gensim_topicsum_model,\
     TYPE_LDA
 from util.model_name_consts import STANFORD_GLOVE, GOOGLE_W2V, AUTOEXTEND,\
-    WIKIPEDIA_LDA, WIKIPEDIA_TFIDF
-from scipy.spatial.distance import cosine
+    WIKIPEDIA_LDA, WIKIPEDIA_TFIDF, WIKIPEDIA_W2G
 from sklearn.base import TransformerMixin
 from util.wordnet.wordnet_graph import WordNetGraph
 from util.wordnet.wordnet_utils import WordNetUtils
+from util.word2gauss_wrapper import load_word2gauss_model
 
 
 class EvocationFeatureExtractor(TransformerMixin):
@@ -285,8 +283,7 @@ class EvocationFeatureExtractor(TransformerMixin):
         features=[]
         
         if (self.w2g_model_loc != None) and (self.w2g_vocab_loc!=None):
-            voc = Vocabulary.load(self.w2g_vocab_loc)
-            w2g = GaussianEmbedding.load(self.w2g_model_loc)
+            w2g = load_word2gauss_model(WIKIPEDIA_W2G, self.w2g_model_loc, self.w2g_vocab_loc)
 #             import sys;sys.path.append(r'/mnt/c/Users/Andrew/.p2/pool/plugins/org.python.pydev_6.2.0.201711281614/pysrc')
 #             import pydevd;pydevd.settrace()
             
@@ -294,36 +291,18 @@ class EvocationFeatureExtractor(TransformerMixin):
 #                 stimuli = stimuli.encode()
 #                 response= response.encode()
                 #treat stimuli/response a document and let the vocab tokenize it. This way we can capture higher order ngrams
-                stimuli_tokens = voc.tokenize(self._underscore_to_space(stimuli))
-                response_tokens = voc.tokenize(self._underscore_to_space(response))
-                #compute cosine similarity and offset between vectors
-                sim = 1-cosine(w2g.phrases_to_vector([stimuli_tokens, []],vocab=voc), w2g.phrases_to_vector([response_tokens,[]], vocab=voc))
-                offset = w2g.phrases_to_vector([stimuli_tokens, response_tokens], vocab=voc)
+                stimuli_as_doc = self._underscore_to_space(stimuli)
+                response_as_doc = self._underscore_to_space(response)
                 
-                #We want to get the energy function between vectors (either KL or IP depending on how we trained the model)
-                #but I can't see an easy way to calculate it from the vectors themselves, 
-                stimuli_id=None
-                response_id=None
-                try:
-                    stimuli_id = voc.word2id(self._space_to_underscore(stimuli))
-                except KeyError:
-                    warnings.warn("{} not in W2G vocab".format(stimuli))
+                w2g_sim = w2g.get_similarity(stimuli_as_doc, response_as_doc)
+                w2g_offset = w2g.get_offset(stimuli_as_doc, response_as_doc)
                 
-                try:
-                    response_id = voc.word2id(self._space_to_underscore(response))
-                except KeyError:
-                    warnings.warn("{} not in W2G vocab".format(response))
-                energy = 0
-                if (stimuli_id!=None) and (response_id!=None):
-                    energy = w2g.energy(stimuli_id, response_id)
-                    
-                w2g_energy = -energy #energy is -KL, so -1x to make it normal KL
-                w2g_sim = sim
-                w2g_offset = offset
+                #assume stimuli/response are a valid ngram
+                w2g_energy = w2g.get_energy(self._space_to_underscore(stimuli), self._space_to_underscore(response))
+                
                 features.append(np.hstack((w2g_energy,w2g_sim,w2g_offset)))
             
-            del w2g #clear from memory
-            del voc
+            w2g._purge_model() #clear from memory
         
         else:
             warnings.warn("One or more of w2g_model_loc or w2g_vocab_loc is unspecified. Returning blank features")
