@@ -14,7 +14,7 @@ import re
 # import os
 from extended_lesk import ExtendedLesk
 from util.gensim_wrappers.gensim_vector_models import load_gensim_vector_model
-from util.gensim_wrappers.gensim_docsum_models import load_gensim_docsum_model,\
+from util.gensim_wrappers.gensim_topicsum_models import load_gensim_topicsum_model,\
     TYPE_LDA
 from util.model_name_consts import STANFORD_GLOVE, GOOGLE_W2V, AUTOEXTEND,\
     WIKIPEDIA_LDA, WIKIPEDIA_TFIDF
@@ -72,7 +72,7 @@ class EvocationFeatureExtractor(TransformerMixin):
     def get_lda_feats(self,stimuli_response, verbose=True):
         features = []
         if (self.lda_loc != None) and (self.wordids_loc!=None) and(self.tfidf_loc!=None):
-            lda = load_gensim_docsum_model(WIKIPEDIA_LDA, TYPE_LDA, self.lda_loc, WIKIPEDIA_TFIDF, self.wordids_loc, self.tfidf_loc)
+            lda = load_gensim_topicsum_model(WIKIPEDIA_LDA, TYPE_LDA, self.lda_loc, WIKIPEDIA_TFIDF, self.wordids_loc, self.tfidf_loc)
             
             
             total = len(stimuli_response)

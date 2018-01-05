@@ -13,7 +13,7 @@ from word2gauss import GaussianEmbedding
 from util.gensim_wrappers.gensim_vector_models import load_gensim_vector_model
 from util.model_name_consts import GOOGLE_W2V, STANFORD_GLOVE, AUTOEXTEND,\
     WIKIPEDIA_LDA, WIKIPEDIA_TFIDF
-from util.gensim_wrappers.gensim_docsum_models import load_gensim_docsum_model,\
+from util.gensim_wrappers.gensim_topicsum_models import load_gensim_topicsum_model,\
     TYPE_LDA
 
 lda_loc="/mnt/c/vectors/lda_prep_no_lemma/no_lemma.101.lda"
@@ -50,7 +50,7 @@ feature_folder = "features"
 datasets = ["evoc","usf","eat"]
 
 print("lda")
-lda = load_gensim_docsum_model(WIKIPEDIA_LDA, TYPE_LDA, lda_loc, WIKIPEDIA_TFIDF,wordids_loc, tfidf_loc, word_separator="_")
+lda = load_gensim_topicsum_model(WIKIPEDIA_LDA, TYPE_LDA, lda_loc, WIKIPEDIA_TFIDF,wordids_loc, tfidf_loc, tokenizer=lambda x: x.split("_"))
 for dataset in datasets:
     word_pairs = load_word_pairs(os.path.join(feature_folder, dataset))
      

@@ -9,8 +9,8 @@
     efficiently use system memory.
 '''
 import warnings
-from gensim.corpora.dictionary import Dictionary
-from gensim.models.tfidfmodel import TfidfModel
+from gensim.corpora import Dictionary
+from gensim.models import TfidfModel
 
 _models =  {} #holds models in form {model_name:GensimTfidfModel}
 #By using a module-level variables, we can easily share singleton-like instances across various other modules
@@ -62,7 +62,7 @@ def get_gensim_tfidf_model(model_name):
     
     return _models[model_name]
 
-def purge_gensim_vector_model(model_name):
+def purge_gensim_tfidf_model(model_name):
     """
         Convenience method for removing model specified by model_name from
         memory.
@@ -73,12 +73,16 @@ def purge_gensim_vector_model(model_name):
         :param model_name: the name of the model to be returned
         :type model_name: str
         
-        :raises Exception: If model_name has not been loaded already using load_gensim_docsum_model()
+        :raises Exception: If model_name has not been loaded already using load_gensim_tfidf_model()
     """
     if model_name not in _models:
-        raise Exception("Model '{}' not currently loaded. Please call load_gensim_docsum_model() first.".format(model_name))
+        raise Exception("Model '{}' not currently loaded. Please call load_gensim_tfidf_model() first.".format(model_name))
     
     _models[model_name]._purge_model()
+
+
+
+
 
 class GensimTFIDFModel(object):
     """
@@ -114,16 +118,32 @@ class GensimTFIDFModel(object):
             self._get_tfidf()
     
     def _get_id2word(self):
+        """
+            Handles Dictionary access and lazy loading
+            
+            :returns: the word2id dictionary
+            :rtype: gensim.corpora.Dictionary
+        """
         if self.id2word == None:
             self.id2word = Dictionary.load_from_text(self.word_ids_loc)
         return self.id2word
     
     def _get_tfidf(self):
+        """
+            Handles TFIDF model access and lazy loading
+            
+            :returns: the TFIDF model
+            :rtype: gensim.models.TfidfModel
+        """
         if self.tfidf == None:
             self.tfidf = TfidfModel.load(self.tfidf_model_loc)
         return self.tfidf
     
     def _purge_model(self):
+        """
+            Removes model from active memory but still allows for it to be read
+            back from disk later (assuming the files have not moved)
+        """
         self.id2word = None
         self.tfidf = None
     
