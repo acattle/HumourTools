@@ -232,7 +232,7 @@ def main(dataset_to_test):
         train_sr= stimuli_response[test_size:]
         
         train_X = evoc_feat_ext.fit_transform(train_sr)
-        test_X = test_sr
+        test_X = evoc_feat_ext.transform(test_sr)
         
         num_features = train_X.shape[1]
         

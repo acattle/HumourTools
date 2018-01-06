@@ -23,7 +23,7 @@ from util.word2gauss_wrapper import load_word2gauss_model
 
 
 class EvocationFeatureExtractor(TransformerMixin):
-    def __init__(self, lda_loc=None, wordids_loc=None, tfidf_loc=None, w2v_loc=None, autoex_loc=None, betweenness_loc=None, load_loc=None, wordnetgraph_loc=None, glove_loc=None, w2g_model_loc=None, w2g_vocab_loc=None, lesk_relations=None, dtype=np.float32, full_dir=""):
+    def __init__(self, lda_loc=None, wordids_loc=None, tfidf_loc=None, w2v_loc=None, autoex_loc=None, betweenness_loc=None, load_loc=None, wordnetgraph_loc=None, glove_loc=None, w2g_model_loc=None, w2g_vocab_loc=None, lesk_relations=None, dtype=np.float32, verbose=True):
         self.lda_loc = lda_loc
         self.wordids_loc = wordids_loc
         self.tfidf_loc = tfidf_loc
@@ -50,7 +50,10 @@ class EvocationFeatureExtractor(TransformerMixin):
 #         with open(wordnetgraph_loc, "rb") as wordnetgraph_pkl:
 #             self.wn_graph = pickle.load(wordnetgraph_pkl)
         self.dtype=dtype
-        self.full_dir=full_dir
+        
+        #https://stackoverflow.com/questions/5980042/how-to-implement-the-verbose-or-v-option-into-a-script
+        self.verboseprint = print if verbose else lambda *a, **k: None
+        self.verbose_interval = 1000
     
     
     def _get_synsets(self,word):
@@ -67,7 +70,7 @@ class EvocationFeatureExtractor(TransformerMixin):
     def fit(self,X, y=None):
         return self
     
-    def get_lda_feats(self,stimuli_response, verbose=True):
+    def get_lda_feats(self,stimuli_response):
         features = []
         if (self.lda_loc != None) and (self.wordids_loc!=None) and(self.tfidf_loc!=None):
             lda = load_gensim_topicsum_model(WIKIPEDIA_LDA, TYPE_LDA, self.lda_loc, WIKIPEDIA_TFIDF, self.wordids_loc, self.tfidf_loc)
@@ -79,8 +82,8 @@ class EvocationFeatureExtractor(TransformerMixin):
                 
                 features.append(lda_sim)
                 
-                if verbose and (len(features) % 500 == 0):
-                    print("{}/{} done".format(len(features), total))
+                if (len(features) % self.verbose_interval == 0):
+                    self.verboseprint("{}/{} done".format(len(features), total))
             
             
             del lda #clear from memory
@@ -254,7 +257,7 @@ class EvocationFeatureExtractor(TransformerMixin):
         
         return np.vstack(features)
     
-    def get_dir_rel(self,stimuli_response, verbose=True):
+    def get_dir_rel(self,stimuli_response):
 #         if (self.wordnetgraph_loc != None):
 #             with open(self.wordnetgraph_loc, "rb") as wordnetgraph_pkl:
 #                 wn_graph = pickle.load(wordnetgraph_pkl)
@@ -269,8 +272,8 @@ class EvocationFeatureExtractor(TransformerMixin):
             dirrel = wn_graph.get_directional_relativity(stimuli_synsets,response_synsets)
             features.append(dirrel)
             
-            if verbose and (len(features) % 500 == 0):
-                print("{}/{} done".format(len(features), total))
+            if (len(features) % self.verbose_interval == 0):
+                self.verboseprint("{}/{} done".format(len(features), total))
         
         del wn_graph #clear from memory
     
@@ -310,7 +313,7 @@ class EvocationFeatureExtractor(TransformerMixin):
         
         return np.vstack(features)
     
-    def get_wn_feats(self,stimuli_response, verbose = True):
+    def get_wn_feats(self,stimuli_response):
         features=[]
         wnu = WordNetUtils(cache=True)
 #         el=None
@@ -356,18 +359,18 @@ class EvocationFeatureExtractor(TransformerMixin):
                                        lch_max, lch_avg
                                        )))
             
-            if verbose and (len(features) % 500 == 0):
-                print("{}/{} done".format(len(features), total))
+            if (len(features) % self.verbose_interval == 0):
+                self.verboseprint("{}/{} done".format(len(features), total))
         
         del wnu
         
         return np.vstack(features)
     
-    def get_extended_lesk_feats(self, stimuli_response, verbose=True):
+    def get_extended_lesk_feats(self, stimuli_response):
         features = []
         
         if (self.lesk_relations != None):
-            el = ExtendedLesk(self.lesk_relations, cache=True) #doesn't matter if we cache since we deleted it when we're done.d
+            el = ExtendedLesk(self.lesk_relations, cache=True) #doesn't matter if we cache since we deleted it when we're done.
             
             total = len(stimuli_response)
             for stimuli, response in stimuli_response:
@@ -376,8 +379,8 @@ class EvocationFeatureExtractor(TransformerMixin):
                 
                 features.append(extended_lesk)
             
-                if verbose and (len(features) % 500 == 0):
-                    print("{}/{} done".format(len(features), total))
+                if (len(features) % self.verbose_interval == 0):
+                    self.verboseprint("{}/{} done".format(len(features), total))
             
             del el #clear from memory
         
@@ -388,109 +391,47 @@ class EvocationFeatureExtractor(TransformerMixin):
         return np.vstack(features)
     
     def transform(self, stimuli_response):
-        stimuli_response = [ (stimuli.lower(), response.lower()) for stimuli, response in stimuli_response]
-#         association_tuples = []
-#         synset_map = {}
-#         synset_name_map = {}
-#         for stimuli, response, strength in stimuli_response_strength:
-#             stimuli = stimuli.lower()
-#             response = response.lower()
-#             association_tuples.append( (stimuli.lower(), response.lower(), {}, strength))
-#             if 
-        
-#         import random
-#         random.seed(10)
-#         random.shuffle(association_tuples)
-# 
-#         strengths=[]
-#         word_pairs = []
-#         for stimuli,responce in stimuli_response:
-#             strengths.append(strength)
-#             word_pairs.append((stim,resp))
-# 
-#         strengths=vstack(strengths).astype(float32)
-#         strengths=strengths.reshape((strengths.shape[0],1))
-# 
-#         with open(os.path.join(self.full_dir, "strengths.pkl"), "wb") as strength_file:
-#             pickle.dump(strengths, strength_file)
-#         print("strengths saved")
-#         with open(os.path.join(self.full_dir, "word_pairs.pkl"), "wb") as strength_file:
-#             pickle.dump(word_pairs, strength_file)
-#         print("word pairs saved")
-        
+        stimuli_response = [(stimuli.lower(), response.lower()) for stimuli, response in stimuli_response]
         features = []
         
+        self.verboseprint("starting lda")
         features.append(self.get_lda_feats(stimuli_response))
-        print("lda done")
-   
-#         writePickle(association_tuples, self.full_dir)
-   
+        self.verboseprint("lda done")
+        
+        self.verboseprint("starting betweenness")
         features.append(self.get_wn_betweenness(stimuli_response))
-        print("betweenness done")
-   
-#         writePickle(association_tuples, self.full_dir)
-   
+        self.verboseprint("betweenness done")
+       
+        self.verboseprint("starting load")
         features.append(self.get_wn_load(stimuli_response))
-        print("load done")
-              
-#         writePickle(association_tuples, self.full_dir)
-           
+        self.verboseprint("load done")
+       
+        self.verboseprint("starting w2v")
         features.append(self.get_w2v_feats(stimuli_response))
-        print("w2v done")
-   
-#         writePickle(association_tuples, self.full_dir)
-               
+        self.verboseprint("w2v done")
+       
+        self.verboseprint("starting glove")
         features.append(self.get_glove_feats(stimuli_response))
-        print("glove done")
-   
-#         writePickle(association_tuples, self.full_dir)
-           
+        self.verboseprint("glove done")
+       
+        self.verboseprint("starting autoex")
         features.append(self.get_autoex_feats(stimuli_response))
-        print("autoex done")
-   
-#         writePickle(association_tuples, self.full_dir)
-           
+        self.verboseprint("autoex done")
+       
+        self.verboseprint("starting dirrels")
         features.append(self.get_dir_rel(stimuli_response))
-        print("dirrels done")
-  
-#         writePickle(association_tuples, self.full_dir)
-           
+        self.verboseprint("dirrels done")
+      
+        self.verboseprint("starting wordnet feats")
         features.append(self.get_wn_feats(stimuli_response))
-        print("wordnet feats done")
-   
-#         writePickle(association_tuples, self.full_dir)
-          
+        self.verboseprint("wordnet feats done")
+        
+        self.verboseprint("starting w2g")
         features.append(self.get_w2g_feats(stimuli_response))
-        print("w2g done")
-   
-#         writePickle(association_tuples, self.full_dir)
-          
+        self.verboseprint("w2g done")
+        
+        self.verboseprint("starting extended lesk")
         features.append(self.get_extended_lesk_feats(stimuli_response))
-        print("extended lesk done")
+        self.verboseprint("extended lesk done")
   
-#         writePickle(association_tuples, self.full_dir)
-        
-        #TODO: include [selective] feature scaling?
-        
         return np.hstack(features)
-
-# def writePickle(association_tuples, full_dir):
-#     #deletes features after writing them
-#     feat_dicts = []
-#     for _, _, feat_dict, _ in association_tuples:
-#         feat_dicts.append(feat_dict)
-#     feats = feat_dicts[0].keys()
-#     for feat in feats:
-#         feat_vect = []
-#         for feat_dict in feat_dicts:
-#             val = feat_dict[feat]
-#             if ("lexvector" not in feat) and ("offset" not in feat) and ((val == np.inf) or (val ==-np.inf)):
-#                 val = 0
-#             feat_vect.append(val)
-#             del feat_dict[feat]
-#         feat_vect =np.nan_to_num(np.vstack(feat_vect).astype(np.float32))
-#     
-#         with open(os.path.join(full_dir, "{}.pkl".format(feat)), "wb") as feat_file:
-#             pickle.dump(feat_vect, feat_file)
-#         print("{} done: {}".format(feat, feat_vect.shape))
-
