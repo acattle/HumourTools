@@ -8,7 +8,7 @@
     This module also provides singleton-like handling of Gensim models to more
     efficiently use system memory.
 '''
-import warnings
+import logging
 from gensim.corpora import Dictionary
 from gensim.models import TfidfModel
 
@@ -39,7 +39,7 @@ def load_gensim_tfidf_model(model_name, word_ids_loc, tfidf_model_loc, tokenizer
         :rtype: GensimTfidfModel
     """
     if model_name in _models:
-        warnings.warn("'{}' already loaded. Will use existing instance.".format(model_name), RuntimeWarning)
+        logging.warning("'{}' already loaded. Will use existing instance.".format(model_name), RuntimeWarning)
     else:
         _models[model_name] = GensimTFIDFModel(word_ids_loc, tfidf_model_loc, tokenizer, cache, lazy_load)
         
@@ -79,6 +79,16 @@ def purge_gensim_tfidf_model(model_name):
         raise Exception("Model '{}' not currently loaded. Please call load_gensim_tfidf_model() first.".format(model_name))
     
     _models[model_name]._purge_model()
+
+def purge_all_gensim_tfidf_models():
+    """
+        Convenience method for removing all models from memory.
+        
+        Note: models will lazy load itself back into memory from disk the next
+        time they are called.
+    """
+    for model in _models.values():
+        model._purge_model()
 
 
 

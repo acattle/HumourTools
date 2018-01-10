@@ -7,7 +7,7 @@ from __future__ import print_function, division #for Python 2.7 compatibility
 import pickle
 import numpy as np
 from nltk.corpus import wordnet
-import warnings
+import logging
 from util.gensim_wrappers.gensim_vector_models import load_gensim_vector_model
 from util.gensim_wrappers.gensim_topicsum_models import load_gensim_topicsum_model,\
     TYPE_LDA
@@ -19,7 +19,7 @@ from util.wordnet.wordnet_utils import WordNetUtils
 
 
 class HayashiFeatureExtractor(TransformerMixin):
-    def __init__(self, lda_loc=None, wordids_loc=None, tfidf_loc=None, w2v_loc=None, autoex_loc=None, betweenness_loc=None, load_loc=None, wordnetgraph_loc=None, glove_loc=None, w2g_model_loc=None, w2g_vocab_loc=None, dtype=np.float32):
+    def __init__(self, lda_loc=None, wordids_loc=None, tfidf_loc=None, w2v_loc=None, autoex_loc=None, betweenness_loc=None, load_loc=None, verbose=False):
         self.lda_loc = lda_loc
         self.wordids_loc = wordids_loc
         self.tfidf_loc = tfidf_loc
@@ -27,25 +27,11 @@ class HayashiFeatureExtractor(TransformerMixin):
         self.autoex_loc = autoex_loc
         self.betweenness_loc = betweenness_loc
         self.load_loc = load_loc
-        if wordnetgraph_loc != None:
-            warnings.warn("wordnetgraph_loc is deprecated")
-#         self.wordnetgraph_loc = wordnetgraph_loc
-#         self.glove_loc = glove_loc
-#         self.w2g_model_loc = w2g_model_loc
-#         self.w2g_vocab_loc = w2g_vocab_loc
         
-#         self.lda = GensimLDAModel(lda_loc, wordids_loc, tfidf_loc)
-#         self.word2vec = GoogleWord2Vec(w2v_loc)
-#         with open(autoex_loc, "rb") as autoex_pkl:
-#             self.autoex = pickle.load(autoex_pkl)
-#         with open(betweenness_loc, "rb") as betweenness_pkl:
-#             self.betweenness = pickle.load(betweenness_pkl)
-#         with open(load_loc, "rb") as load_pkl:
-#             self.load = pickle.load(load_pkl)
-#         with open(wordnetgraph_loc, "rb") as wordnetgraph_pkl:
-#             self.wn_graph = pickle.load(wordnetgraph_pkl)
-        self.dtype=dtype
-    
+        if verbose:
+            logging.basicConfig(level=logging.DEBUG)
+        
+        self.verbose_interval = 1000
     
     def _get_synset(self,word):
         return wordnet.synset(word)
@@ -53,136 +39,90 @@ class HayashiFeatureExtractor(TransformerMixin):
     def _get_name(self,word):
         return word.split(".", 1)[0]
     
-#     def _space_to_underscore(self, word):
-#         return re.sub(" ", "_",word)
-    
-    def get_lda_feats(self, stimuli_response, verbose=True):
-        features=[]
-        if (self.lda_loc != None) and (self.wordids_loc!=None) and(self.tfidf_loc!=None):
-            lda = load_gensim_topicsum_model(WIKIPEDIA_LDA, TYPE_LDA, self.lda_loc, WIKIPEDIA_TFIDF, self.wordids_loc, self.tfidf_loc)
+    def get_num_dimensions(self):
+        """
+            Returns the number of feature vector dimensions.
             
-            processed = 0
-            total = len(stimuli_response)
-            for stimuli, response in stimuli_response:
-                stim_word = self._get_name(stimuli)
-                resp_word = self._get_name(response)
-                lda_sim=lda.get_similarity(stim_word, resp_word)
-                
-                features.append(lda_sim)
-                
-                processed += 1
-                if verbose and (processed % 500 == 0):
-                    print("{}/{} done".format(processed, total))
-            
-            del lda #clear from memory
+            :returns: the number of feature dimensions
+            :rtype: int
+        """
+        dimensions = 109 #the number of dimensions for all features except autoex offset
         
-        else:
-            warnings.warn("One or more of lda_loc, wordids_loc, or tfidf_loc is unspecified. Returning blank features")
-            features = [[] * len(stimuli_response)]
+        autoex = load_gensim_vector_model(AUTOEXTEND, self.autoex_loc, True)
+        dimensions += autoex.get_dimensions() #add the dimensionality of the autoex embeddings
+        
+        return dimensions
+    
+    def get_lda_feats(self, stimuli_response):
+        features=[]
+        lda = load_gensim_topicsum_model(WIKIPEDIA_LDA, TYPE_LDA, self.lda_loc, WIKIPEDIA_TFIDF, self.wordids_loc, self.tfidf_loc)
+        
+        processed = 0
+        total = len(stimuli_response)
+        for stimuli, response in stimuli_response:
+            stim_word = self._get_name(stimuli)
+            resp_word = self._get_name(response)
+            lda_sim=lda.get_similarity(stim_word, resp_word)
+            
+            features.append(lda_sim)
+            
+            processed += 1
+            if not (processed % self.verbose_interval):
+                logging.debug("{}/{} done".format(processed, total))
         
         return np.vstack(features)
     
     def get_w2v_feats(self, stimuli_response):
         features = []
-        if (self.w2v_loc != None):
-            w2v = load_gensim_vector_model(GOOGLE_W2V, self.w2v_loc)
-            
-            for stimuli, response in stimuli_response:
-                stim_word = self._get_name(stimuli)
-                resp_word = self._get_name(response)
-                w2v_sim = w2v.get_similarity(stim_word, resp_word)
-#                 features_dict["w2v offset"] = w2v.get_vector(stim_word) - w2v.get_vector(resp_word)
-                
-                features.append(w2v_sim)
-#             del w2v #clear from memory
+        w2v = load_gensim_vector_model(GOOGLE_W2V, self.w2v_loc)
         
-        else:
-            warnings.warn("No word2vec location specified. Returning blank features")
-            features = [[] * len(stimuli_response)]
+        for stimuli, response in stimuli_response:
+            stim_word = self._get_name(stimuli)
+            resp_word = self._get_name(response)
+            w2v_sim = w2v.get_similarity(stim_word, resp_word)
+            features.append(w2v_sim)
         
         return np.vstack(features)
     
-#     def get_glove_feats(self, stimuli_response):
-#         if (self.glove_loc != None):
-#             glove = GoogleWord2Vec(self.glove_loc, True) #https://radimrehurek.com/gensim/scripts/glove2word2vec.html
-#             
-#             for stimuli, response in stimuli_response:
-#                 santized_stimuli = self._space_to_underscore(stimuli)
-#                 santized_response = self._space_to_underscore(response)
-#                 features_dict["glove sim"] = glove.get_similarity(santized_stimuli, santized_response)
-#                 features_dict["glove offset"] = glove.get_vector(santized_stimuli) - glove.get_vector(santized_response)
-#             
-#             del glove #clear from memory
-#         
-#         else:
-#             warnings.warn("No GloVe location specified. Returning blank features")
-#         
-#         return np.vstack(features)
-    
     def get_autoex_feats(self, stimuli_response):
         features = []
-        if (self.autoex_loc != None):
-#             with open(self.autoex_loc, "rb") as autoex_pkl:
-#                 autoex = pickle.load(autoex_pkl)
-            autoex = load_gensim_vector_model(AUTOEXTEND, self.autoex_loc, True)
-            
-            for stimuli, response in stimuli_response:
-                autoex_sim = autoex.get_similarity(stimuli, response)
-                autoex_offset = autoex.get_vector(stimuli) - autoex.get_vector(response)
-                
-                features.append((autoex_sim, autoex_offset))
-#             del autoex #clear from memory
+        autoex = load_gensim_vector_model(AUTOEXTEND, self.autoex_loc, True)
         
-        else:
-            warnings.warn("No AutoEx location specified. Returning blank features")
-            features = [[] * len(stimuli_response)]
+        for stimuli, response in stimuli_response:
+            autoex_sim = autoex.get_similarity(stimuli, response)
+            autoex_offset = autoex.get_vector(stimuli) - autoex.get_vector(response)
+            
+            features.append((autoex_sim, autoex_offset))
         
         return np.vstack(features)
     
     def get_wn_betweenness(self, stimuli_response):
         features = []
-        if (self.betweenness_loc != None):
-            with open(self.betweenness_loc, "rb") as betweeneness_pkl:
-                betweenness = pickle.load(betweeneness_pkl)
-            
-            for stimuli, response in stimuli_response:
-                stim_betweenness = betweenness.get(stimuli,0.0)
-                resp_betweenness = betweenness.get(response,0.0)
-                
-                features.append((stim_betweenness,resp_betweenness))
-            
-            del betweenness #clear from memory
+        with open(self.betweenness_loc, "rb") as betweeneness_pkl:
+            betweenness = pickle.load(betweeneness_pkl)
         
-        else:
-            warnings.warn("No Betweenness Centrality location specified. Returning blank features")
-            features = [[] * len(stimuli_response)]
-        
+        for stimuli, response in stimuli_response:
+            stim_betweenness = betweenness.get(stimuli,0.0)
+            resp_betweenness = betweenness.get(response,0.0)
+            
+            features.append((stim_betweenness,resp_betweenness))
+            
         return np.vstack(features)
     
     def get_wn_load(self, stimuli_response):
         features = []
-        if (self.load_loc != None):
-            with open(self.load_loc, "rb") as load_pkl:
-                load = pickle.load(load_pkl)
-            
-            for stimuli, response in stimuli_response:
-                stim_load = load.get(stimuli,0.0)
-                resp_load = load.get(response,0.0)
-                
-                features.append((stim_load, resp_load))
-            
-            del load #clear from memory
+        with open(self.load_loc, "rb") as load_pkl:
+            load = pickle.load(load_pkl)
         
-        else:
-            warnings.warn("No Load Centrality location specified. Returning blank features")
-            features = [[] * len(stimuli_response)]
+        for stimuli, response in stimuli_response:
+            stim_load = load.get(stimuli,0.0)
+            resp_load = load.get(response,0.0)
+            
+            features.append((stim_load, resp_load))        
         
         return np.vstack(features)
     
     def get_dir_rel(self, stimuli_response):
-#         if (self.wordnetgraph_loc != None):
-#             with open(self.wordnetgraph_loc, "rb") as wordnetgraph_pkl:
-#                 wn_graph = pickle.load(wordnetgraph_pkl)
         features = []
         wn_graph = WordNetGraph()
         
@@ -191,56 +131,14 @@ class HayashiFeatureExtractor(TransformerMixin):
             
             features.append(dirrel)
         
-        del wn_graph #clear from memory
-        
-#         else:
-#             warnings.warn("No WordNetGraph location specified. Returning blank features")
-        
         return np.vstack(features)
     
-#     def get_w2g_feats(self, stimuli_response):
-#         if (self.w2g_model_loc != None) and (self.w2g_vocab_loc!=None):
-#             voc = Vocabulary.load(self.w2g_vocab_loc)
-#             w2g = GaussianEmbedding.load(self.w2g_model_loc)
-#             
-#             for stimuli, response in stimuli_response:
-#                 santized_stimuli = self._space_to_underscore(stimuli)
-#                 santized_response = self._space_to_underscore(response)
-#                 stimuli_id=None
-#                 try:
-#                     stimuli_id = voc.word2id(santized_stimuli)
-#                 except KeyError:
-#                     warnings.warn("{} not in W2G vocab".format(santized_stimuli))
-#                 
-#                 response_id=None
-#                 try:
-#                     response_id = voc.word2id(santized_response)
-#                 except KeyError:
-#                     warnings.warn("{} not in W2G vocab".format(santized_response))
-#                 
-#                 energy = 0
-#                 sim=0
-#                 if (stimuli_id!=None) and (response_id!=None):
-#                     energy = w2g.energy(stimuli_id, response_id)
-#                     sim=1-cosine(w2g.phrases_to_vector([[santized_stimuli], []],vocab=voc), w2g.phrases_to_vector([[santized_response],[]], vocab=voc))
-#                     
-#                 features_dict["w2g energy"] = -energy#energy is -KL, so -1x to make it normal KL
-#                 features_dict["w2g sim"] = sim
-#                 features_dict["w2g offset"] = w2g.phrases_to_vector([[santized_stimuli], [santized_response]], vocab=voc)
-#             
-#             del w2g #clear from memory
-#             del voc
-#         
-#         else:
-#             warnings.warn("One or more of w2g_model_loc or w2g_vocab_loc is unspecified. Returning blank features")
-#         
-#         return np.vstack(features)
-    
-    def get_wn_feats(self, stimuli_response, verbose = True):
+    def get_wn_feats(self, stimuli_response):
         features = []
         wnu = WordNetUtils(cache=True)
         
         total = len(stimuli_response)
+        processed = 0
         for stimuli, response in stimuli_response:
             stimuli_synset = self._get_synset(stimuli)
             response_synset = self._get_synset(response)
@@ -251,10 +149,9 @@ class HayashiFeatureExtractor(TransformerMixin):
             
             features.append((stim_lexvector, resp_lexvector, wup_sim))
             
-            if verbose and (len(features) % 500 == 0):
-                print("{}/{} done".format(len(features), total))
-        
-        del wnu
+            processed += 1
+            if not (processed % self.verbose_interval):
+                logging.debug("{}/{} done".format(len(features), total))
         
         return np.vstack(features)
     
@@ -263,31 +160,32 @@ class HayashiFeatureExtractor(TransformerMixin):
         
         features = []
         
+        logging.debug("starting lda")
         features.append(self.get_lda_feats(association_tuples))
-        print("lda done")
-                       
-        features.append(self.get_w2v_feats(association_tuples))
-        print("w2v done")
-               
-#         features.append(self.get_glove_feats(association_tuples))
-#         print("glove done")
-         
-        features.append(self.get_autoex_feats(association_tuples))
-        print("autoex done")
-          
-        features.append(self.get_wn_betweenness(association_tuples))
-        print("betweenness done")
-              
-        features.append(self.get_wn_load(association_tuples))
-        print("load done")
-              
-        features.append(self.get_dir_rel(association_tuples))
-        print("dirrels done")
-          
-        features.append(self.get_wn_feats(association_tuples))
-        print("wordnet feats done")
+        logging.debug("lda done")
         
-#         features.append(self.get_w2g_feats(association_tuples))
-#         print("w2g done")
+        logging.debug("starting w2v")
+        features.append(self.get_w2v_feats(association_tuples))
+        logging.debug("w2v done")
+        
+        logging.debug("starting autoex")
+        features.append(self.get_autoex_feats(association_tuples))
+        logging.debug("autoex done")
+        
+        logging.debug("starting betweenness")
+        features.append(self.get_wn_betweenness(association_tuples))
+        logging.debug("betweenness done")
+        
+        logging.debug("starting load")
+        features.append(self.get_wn_load(association_tuples))
+        logging.debug("load done")
+        
+        logging.debug("starting dirrels")
+        features.append(self.get_dir_rel(association_tuples))
+        logging.debug("dirrels done")
+        
+        logging.debug("starting wordnet feats")
+        features.append(self.get_wn_feats(association_tuples))
+        logging.debug("wordnet feats done")
                    
         return np.hstack(features)

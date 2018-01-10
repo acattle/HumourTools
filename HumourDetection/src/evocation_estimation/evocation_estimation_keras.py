@@ -4,34 +4,60 @@ Created on Jan 9, 2017
 @author: Andrew
 '''
 import argparse
-
-# from evocation_reader import EATGraph, USFGraph, EvocationDataset
-# from evocation_feature_extractor import FeatureExtractor
 from time import strftime
 from scipy.stats.stats import spearmanr, pearsonr
-import pickle
-# import warnings
-# warnings.filterwarnings("error")
 from keras.models import Sequential
 from keras.layers import Dense, Dropout
-#needed for unpickling to work
-# from autoextend import AutoExtendEmbeddings
-# from wordnet_graph import WordNetGraph
-# from sklearn.feature_extraction.dict_vectorizer import DictVectorizer
-import random
-from math import ceil
-from os.path import join, exists
-# from functools import partial
-from multiprocessing import Pool
-from sklearn.preprocessing import StandardScaler
+from os.path import join
 from keras.wrappers.scikit_learn import KerasRegressor
-from sklearn.feature_selection.rfe import RFECV
-from sklearn.model_selection import StratifiedKFold #NOT from cross_validation
-from sklearn.feature_selection.univariate_selection import SelectKBest
-from sklearn.feature_selection.mutual_info_ import mutual_info_regression
-from evocation_feature_extractor import EvocationFeatureExtractor
-import numpy as np
+from evocation_feature_extractor import EvocationFeatureExtractor, DEFAULT_FEATS
+from sklearn.pipeline import Pipeline
+import pickle
+from util.keras_pipeline_persistance import save_keras_pipeline,\
+    load_keras_pipeline
 
+def _create_mlp(num_units=None, input_dim=None):
+    if num_units == None:
+        raise ValueError("num_units cannot be None. Please specify a value.")
+    if input_dim == None:
+        raise ValueError("input_dim cannot be None. Please specify a value.")
+    model = Sequential()
+    model.add(Dense(num_units, input_dim=input_dim))
+    model.add(Dropout(0.5))
+    model.add(Dense(num_units, input_dim=num_units))
+    model.add(Dropout(0.5))
+    model.add(Dense(1, input_dim=num_units, activation="relu"))
+    model.compile(loss="mse", optimizer="adam")
+    return model
+
+def train_evocation_estimation_pipeline(X, y, num_units = None, epochs=50, batchsize=5000, features=DEFAULT_FEATS, lda_loc=None, wordids_loc=None, tfidf_loc=None, w2v_loc=None, autoex_loc=None, betweenness_loc=None, load_loc=None,  glove_loc=None, w2g_model_loc=None, w2g_vocab_loc=None, lesk_relations=None, verbose=0):
+    evoc_feat_ext = EvocationFeatureExtractor(features=features,
+                                              lda_loc=lda_loc,
+                                              wordids_loc=wordids_loc,
+                                              tfidf_loc=tfidf_loc,
+                                              w2v_loc=w2v_loc,
+                                              autoex_loc=autoex_loc,
+                                              betweenness_loc=betweenness_loc,
+                                              load_loc=load_loc,
+                                              glove_loc=glove_loc,
+                                              w2g_model_loc=w2g_model_loc,
+                                              w2g_vocab_loc=w2g_vocab_loc,
+                                              lesk_relations=lesk_relations,
+                                              verbose=verbose
+                                              )
+       
+    input_dim = evoc_feat_ext.get_num_dimensions()
+    if num_units == None:
+        #if num_units not specified, default to half of the input (minimum 5 units)
+        num_units = max(int(input_dim/2), 5)
+    estimator = KerasRegressor(build_fn=_create_mlp, num_units=num_units, input_dim=input_dim, epochs=epochs, batch_size=batchsize, verbose=verbose)
+    
+    evoc_est_pipeline = Pipeline([("extract features", evoc_feat_ext),
+                                  ("estimator", estimator)
+                                  ])
+    evoc_est_pipeline.fit(X,y) #train the feature extractor
+    return evoc_est_pipeline
+    
 
 def main(dataset_to_test):
     parser = argparse.ArgumentParser(description='Evocation Estimation')
@@ -55,146 +81,22 @@ def main(dataset_to_test):
     print('# epoch: {}'.format(args.epoch))
     print('')
     
-    dtype = np.float32
-    
-
-#     feat_labels = [#"lda sim", "w2v sim", "dirrel", "lexvector", "avg stimuli betweenness","avg response betweenness", "wup avg",
-#                    "lda sim","w2v sim", "glove sim","w2g energy","w2g sim",
-#                     "max autoex sim", "avg autoex sim",
-# #                     "max stimuli betweenness", "avg stimuli betweenness",# "total stimuli betweenness",
-# #                     "max response betweenness", "avg response betweenness",# "total response betweenness",
-# #                     "max stimuli load", "avg stimuli load",# "total stimuli load",
-# #                     "max response load", "avg response load",# "total response load",
-#                     "dirrel",# "stimuli lexvector", "response lexvector",
-#                     "wup max", "wup avg", #"path max", "path avg", "lch max", "lch avg",
-#                     "max load", "avg load", "max betweenness", "avg betweenness", "lexvector",
-# #                    "lda sim", "w2v sim", "autoex sim mapped", "wup", "stimuli betweenness", "response betweenness", "stimuli load", "response load", "dirrel", "stimuli lexvector", "response lexvector",
-#                     "extended lesk"
-#                     ]
-#     offset_labels = ["glove offset"]#"w2v offset", "glove offset", "w2g offset"]
-# #     embedding_labels = ["w2v all", "glove all", "w2g all sim", "w2g all energy", "w2g all both"]
-#     
-# #     feature_sets = [("max load", ["max response load", "max stimuli load"]),
-# #                     ("avg load", ["avg response load", "avg stimuli load"]),
-# #                     ("max betweenness", ["max response betweenness", "max stimuli betweenness"]),
-# #                     ("avg betweenness", ["avg response betweenness", "avg stimuli betweenness"]),
-# #                     ("lexvector", ["stimuli lexvector", "response lexvector"])]
-    output_dir = "results/{}".format(dataset_to_test)
     pickle_dir = "features/{}".format(dataset_to_test)
-    
-    
-    
-    feat_labels_to_scale = [#"lda sim", "w2v sim", "dirrel", "lexvector", "avg stimuli betweenness","avg response betweenness", "wup avg",
-                   "lda sim","w2v sim", "glove sim","w2g energy","w2g sim",
-                    "max autoex sim", "avg autoex sim",
-#                     "dirrel",# "stimuli lexvector", "response lexvector",
-                    "wup max", "wup avg", #"path max", "path avg", "lch max", "lch avg",
-                    "max load", "avg load", "max betweenness", "avg betweenness",
-                    "lexvector","dirrel",
-#                     "extended lesk"
-                    ]
-    feat_labels_no_scale = ["w2v offset",]
-    
-    with open(join(pickle_dir, "strengths.pkl"), "rb") as strength_file:
-        targets = pickle.load(strength_file, encoding="latin1")#https://stackoverflow.com/questions/28218466/unpickling-a-python-2-object-with-python-3
-    targets = targets*100 #seems to help
-    test_size = int(targets.shape[0] * 0.2) #hold out 20% for testing
-#     targets = targets[test_size:]
-#     train_size = int(targets.shape[0] * 0.8)
-    
-#     experiments = [("ranking all feats + lesk", feat_labels + ["glove offset"])]
-    experiments = [("all +lexvector scaling -lesk", (feat_labels_to_scale, feat_labels_no_scale))]
-#     experiments.append(("testing best features (w2v)", ["w2v sim", "w2v offset"]))
-#     for feature in feat_labels :#+ offset_labels:#embedding_labels:
-#         experiments.append(("{} only on test".format(feature), [feature]))
-#     for feature in ["w2v sim", "glove sim", "w2g sim", "w2g energy", "w2v offset", "glove offset", "w2g offset"]:
-#         experiments.append(("{} only on test".format(feature), [feature]))
-#     for feature in feat_labels + ["w2v offset"]:
-#         experiments.append(("minus {} (with w2v) on test".format(feature), [f for f in feat_labels + ["w2v offset"] if f != feature]))
-#     for feature in ["w2v sim", "w2v offset"]:
-#         experiments.append(("minus {} (with w2v) on test".format(feature), feat_labels + [f for f in ["w2v sim", "w2v offset"] if f != feature]))
-#     experiments.append(("all feats with w2v offset on test", feat_labels + ["w2v offset"]))
-#     for offset in offset_labels:
-#         experiments.append(("all feats with {} on test".format(offset), feat_labels + [offset]))
-#     for embedding in embedding_labels:
-#         experiments.append(("all feats with {} on test".format(embedding), feat_labels + [embedding]))
-#     experiments.append(("all embeddings and sims on test", feat_labels + offset_labels))
-#     for feature_set_label, feature_set in feature_sets:
-#     experiments.append(("minus w2v and glove sims (with w2v) on test".format(feature), [f for f in feat_labels + ["w2v offset"] if f not in ["w2v sim", "glove sim"]]))
-    for label, feats in experiments:#, "w2v offset"] + feat_labels:
-#     def run_experiment(experiment):
-#         label, feats = experiment
-#         output_loc = join(output_dir, label)
-#         if exists(output_loc):
-#             print("Found previous {} result. Skipping.".format(label))
-# #             return
-#             continue
-        print("{}\tStarting test for {}".format(strftime("%y-%m-%d_%H:%M:%S"), label))
-        
-        
-#         feature_subset_vects = []
-#         for feat in feats:
-# #             if feat == feature:
-# #                 continue
-#             with open(join(pickle_dir, "{}.pkl".format(feat)), "rb") as feature_file:
-#                 vects = pickle.load(feature_file, encoding="latin1")#https://stackoverflow.com/questions/28218466/unpickling-a-python-2-object-with-python-3
-#             feature_subset_vects.append(vects)
-#             
-#         feature_subset_vects = hstack(feature_subset_vects)
-#         
-#         test_X = feature_subset_vects[:test_size]
-#         train_X = feature_subset_vects[test_size:]
-#         
-#         scaler = StandardScaler()
-#         train_X = scaler.fit_transform(train_X)
-#         test_X = scaler.transform(test_X)
-        
-        
-#         feats_to_scale, feats_no_scale = feats
-#         
-#         
-# #         feats_to_scale = feats_to_scale + feats_no_scale
-# #         feats_no_scale=[]
-# #         
-#         feature_vects_to_scale = []
-#         for feat in feats_to_scale:
-#             with open(join(pickle_dir, "{}.pkl".format(feat)), "rb") as feature_file:
-#                 vects = pickle.load(feature_file, encoding="latin1")#https://stackoverflow.com/questions/28218466/unpickling-a-python-2-object-with-python-3
-#             feature_vects_to_scale.append(vects)
-#         
-#         feature_vects_to_scale = hstack(feature_vects_to_scale)
-#         train_X_to_scale = feature_vects_to_scale[test_size:]
-#         scaler = StandardScaler()
-#         train_X = scaler.fit_transform(train_X_to_scale)
-#         feature_subset_vects = scaler.transform(feature_vects_to_scale)
-# #         feature_subset_vects = feature_vects_to_scale
-#         
-#         if len(feats_no_scale) > 0:
-#             feature_vects_no_scale = []
-#             for feat in feats_no_scale:
-#                 with open(join(pickle_dir, "{}.pkl".format(feat)), "rb") as feature_file:
-#                     vects = pickle.load(feature_file, encoding="latin1")#https://stackoverflow.com/questions/28218466/unpickling-a-python-2-object-with-python-3
-#                 feature_vects_no_scale.append(vects)
-#             
-#             feature_vects_no_scale = hstack(feature_vects_no_scale)
-#             feature_subset_vects = hstack((feature_subset_vects,feature_vects_no_scale))
-#             
-#         
-#         test_X = feature_subset_vects[:test_size]
-#         train_X = feature_subset_vects[test_size:]
 
-        lda_loc="c:/vectors/lda_prep_no_lemma/no_lemma.101.lda"
-        wordids_loc="c:/vectors/lda_prep_no_lemma/lda_no_lemma_wordids.txt.bz2"
-        tfidf_loc="c:/vectors/lda_prep_no_lemma/lda_no_lemma.tfidf_model"
-        w2v_loc="c:/vectors/GoogleNews-vectors-negative300.bin"
-        glove_loc="c:/vectors/glove.840B.300d.withheader.bin"
-        # w2g_model_loc="c:/vectors/wiki.biggervocab.w2g"
-        # w2g_vocab_loc="c:/vectors/wiki.biggersize.gz"
-        w2g_vocab_loc="c:/vectors/wiki.moreselective.gz"
-        w2g_model_loc="c:/vectors/wiki.hyperparam.selectivevocab.w2g"
-        autoex_loc = "c:/vectors/autoextend.word2vecformat.bin"
-        lesk_loc = "d:/git/PyWordNetSimilarity/PyWordNetSimilarity/src/lesk-relation.dat"
-         
+    print("{}\tStarting test".format(strftime("%y-%m-%d_%H:%M:%S")))
+
+    lda_loc="c:/vectors/lda_prep_no_lemma/no_lemma.101.lda"
+    wordids_loc="c:/vectors/lda_prep_no_lemma/lda_no_lemma_wordids.txt.bz2"
+    tfidf_loc="c:/vectors/lda_prep_no_lemma/lda_no_lemma.tfidf_model"
+    w2v_loc="c:/vectors/GoogleNews-vectors-negative300.bin"
+    glove_loc="c:/vectors/glove.840B.300d.withheader.bin"
+    # w2g_model_loc="c:/vectors/wiki.biggervocab.w2g"
+    # w2g_vocab_loc="c:/vectors/wiki.biggersize.gz"
+    w2g_vocab_loc="c:/vectors/wiki.moreselective.gz"
+    w2g_model_loc="c:/vectors/wiki.hyperparam.selectivevocab.w2g"
+    autoex_loc = "c:/vectors/autoextend.word2vecformat.bin"
+    lesk_loc = "d:/git/PyWordNetSimilarity/PyWordNetSimilarity/src/lesk-relation.dat"
+     
 #         lda_loc="/mnt/c/vectors/lda_prep_no_lemma/no_lemma.101.lda"
 #         wordids_loc="/mnt/c/vectors/lda_prep_no_lemma/lda_no_lemma_wordids.txt.bz2"
 #         tfidf_loc="/mnt/c/vectors/lda_prep_no_lemma/lda_no_lemma.tfidf_model"
@@ -206,85 +108,76 @@ def main(dataset_to_test):
 #         w2g_model_loc="/mnt/c/vectors/wiki.hyperparam.selectivevocab.w2g"
 #         autoex_loc = "/mnt/c/vectors/autoextend.word2vecformat.bin"
 #         lesk_loc = "/mnt/d/git/PyWordNetSimilarity/PyWordNetSimilarity/src/lesk-relation.dat"
-        
-        betweenness_pkl="wordnet_betweenness.pkl"
-        load_pkl="wordnet_load.pkl"
-        
-        evoc_feat_ext = EvocationFeatureExtractor(lda_loc=lda_loc,
-                                                  wordids_loc=wordids_loc,
-                                                  tfidf_loc=tfidf_loc,
-                                                  w2v_loc=w2v_loc,
-#                                                   autoex_loc=autoex_pkl,
-                                                  autoex_loc=autoex_loc,
-                                                  betweenness_loc=betweenness_pkl,
-                                                  load_loc=load_pkl,
-#                                                   wordnetgraph_loc=wordnetgraph_pkl,
-                                                  glove_loc=glove_loc,
-                                                  w2g_model_loc=w2g_model_loc,
-                                                  w2g_vocab_loc=w2g_vocab_loc,
-                                                  lesk_relations=lesk_loc,
-                                                  dtype=np.float32)
-        
-        with open(join(pickle_dir, "word_pairs.pkl"), "rb") as words_file:
-            stimuli_response = pickle.load(words_file, encoding="latin1")
-        
-        test_sr = stimuli_response[:test_size]
-        train_sr= stimuli_response[test_size:]
-        
-        train_X = evoc_feat_ext.fit_transform(train_sr)
-        test_X = evoc_feat_ext.transform(test_sr)
-        
-        num_features = train_X.shape[1]
-        
-        test_y = targets[:test_size]
-        train_y = targets[test_size:]
-        print("{}\tVectorization complete".format(strftime("%y-%m-%d_%H:%M:%S")))
-
-
-#         num_features = feature_subset_vects.shape[1]
-        print(num_features)
-        num_units = int(ceil(float(num_features)/2)) #2?
-        
-        if num_units < 5:
-            num_units=5
-        
-        
-        
-        def create_model():
-            model = Sequential()
-            model.add(Dense(num_units, input_dim=num_features))
-            model.add(Dropout(0.5))
-            model.add(Dense(num_units, input_dim=num_units))
-            model.add(Dropout(0.5))
-            model.add(Dense(1, input_dim=num_units, activation="relu"))
-            model.compile(loss="mse", optimizer="adam")
-            return model
-        
-        model = KerasRegressor(build_fn=create_model, epochs=args.epoch, batch_size=args.batchsize, verbose=1)
-#         kselect = SelectKBest(mutual_info_regression, "all")
-#         kselect.fit(train_X, train_Y)
-        
-#         print("Optimal number of features: {}\n".format(rfecv.n_features_))
-#         for feat, mask, rank in zip(feat_labels, kselect.get_support(), kselect.scores_):
-#             print("{}\t{}\t{}".format(feat, mask, rank))
-#         
-#         reg.fit(train_X,train_y, epochs=args.epoch, batch_size=args.batchsize, verbose=1)
-        model.fit(train_X,train_y, epochs=args.epoch, batch_size=args.batchsize, verbose=1)
-        test_pred=model.predict(test_X)
-#         test_y = test_y.reshape((-1,1))
-        print()
-        print(spearmanr(test_y, test_pred))
-#         test_pred=test_pred.flatten()
-        test_y = test_y.flatten()
-        print(pearsonr(test_y,test_pred))
-        
-        
-    #     chainer.serializers.save_npz("eat.model", model)
-        print("{}\tTraining {} finished".format(strftime("%y-%m-%d_%H:%M:%S"), label))
     
-#    p = Pool(11)
-#    p.map(run_experiment, experiments)
+    betweenness_pkl="wordnet_betweenness.pkl"
+    load_pkl="wordnet_load.pkl"
+    
+#         evoc_feat_ext = EvocationFeatureExtractor(lda_loc=lda_loc,
+#                                                   wordids_loc=wordids_loc,
+#                                                   tfidf_loc=tfidf_loc,
+#                                                   w2v_loc=w2v_loc,
+#                                                   autoex_loc=autoex_loc,
+#                                                   betweenness_loc=betweenness_pkl,
+#                                                   load_loc=load_pkl,
+#                                                   glove_loc=glove_loc,
+#                                                   w2g_model_loc=w2g_model_loc,
+#                                                   w2g_vocab_loc=w2g_vocab_loc,
+#                                                   lesk_relations=lesk_loc)
+    
+    with open(join(pickle_dir, "word_pairs.pkl"), "rb") as words_file:
+        stimuli_response = pickle.load(words_file, encoding="latin1")
+    with open(join(pickle_dir, "strengths.pkl"), "rb") as strength_file:
+        targets = pickle.load(strength_file, encoding="latin1")#https://stackoverflow.com/questions/28218466/unpickling-a-python-2-object-with-python-3
+    targets = targets*100 #seems to help
+    test_size = int(targets.shape[0] * 0.2) #hold out 20% for testing
+    
+    test_X = stimuli_response[:test_size]
+    train_X= stimuli_response[test_size:]
+    
+    test_y = targets[:test_size]
+    train_y = targets[test_size:]
+
+    model = train_evocation_estimation_pipeline(train_X, train_y, epochs=args.epoch, batchsize=args.batchsize,
+                                                lda_loc=lda_loc,
+                                                wordids_loc=wordids_loc,
+                                                tfidf_loc=tfidf_loc,
+                                                w2v_loc=w2v_loc,
+                                                autoex_loc=autoex_loc,
+                                                betweenness_loc=betweenness_pkl,
+                                                load_loc=load_pkl,
+                                                glove_loc=glove_loc,
+                                                w2g_model_loc=w2g_model_loc,
+                                                w2g_vocab_loc=w2g_vocab_loc,
+                                                lesk_relations=lesk_loc)
+#     model = load_keras_pipeline("models/{}".format(dataset_to_test))
+    
+    print("{}\tTraining finished".format(strftime("%y-%m-%d_%H:%M:%S")))
+    
+    print("{}\tSaving model".format(strftime("%y-%m-%d_%H:%M:%S")))
+#     from util.gensim_wrappers.gensim_vector_models import purge_all_gensim_vector_models
+#     from util.word2gauss_wrapper import purge_all_word2gauss_vector_models
+#     from util.gensim_wrappers.gensim_topicsum_models import purge_all_gensim_topicsum_models
+#     purge_all_gensim_vector_models()
+#     purge_all_word2gauss_vector_models()
+#     purge_all_gensim_topicsum_models()
+    
+#     save_keras_pipeline("models/{}".format(dataset_to_test), model)
+    
+    print("{}\tModel saved".format(strftime("%y-%m-%d_%H:%M:%S")))
+    
+    print("{}\tStarting test".format(strftime("%y-%m-%d_%H:%M:%S")))
+    test_pred=model.predict(test_X)
+#         test_y = test_y.reshape((-1,1))
+    print()
+    print(spearmanr(test_y, test_pred))
+#         test_pred=test_pred.flatten()
+    test_y = test_y.flatten()
+    print(pearsonr(test_y,test_pred))
+    print("{}\tTest finished".format(strftime("%y-%m-%d_%H:%M:%S")))
     
 if __name__ == '__main__':
+    #import model wrappers to keep them from being garbage collected
+    from util.gensim_wrappers import gensim_vector_models
+    from util import word2gauss_wrapper
     for d in ["evoc", "usf", "eat"]:
         main(d)

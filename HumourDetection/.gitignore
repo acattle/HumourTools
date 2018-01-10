@@ -1,0 +1,15 @@
+/Data/
+/results/
+/SemEval Data/
+/tweet_data/
+/wiki.en.text.vector
+/.settings/
+/.project
+/.pydevproject
+/.pydevproject.bak
+*.pyc
+*.pkl
+*.pickle
+*.h5
+*.dill
+*.sav

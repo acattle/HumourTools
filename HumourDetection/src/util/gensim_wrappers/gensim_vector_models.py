@@ -13,7 +13,7 @@
 
 from gensim.models import KeyedVectors
 import numpy as np
-import warnings
+import logging
 
 _models = {} #holds models in form {model_name:GensimVectorModel}
 #By using a module-level variable, we can easily share singleton-like instances across various other modules
@@ -40,7 +40,7 @@ def load_gensim_vector_model(model_name, vector_loc, binary=True, lazy_load=True
         :rtype: GensimVectorModel
     """
     if model_name in _models:
-        warnings.warn("'{}' already loaded. Will use existing instance.".format(model_name), RuntimeWarning)
+        logging.warning("'{}' already loaded. Will use existing instance.".format(model_name), RuntimeWarning)
     else:
         _models[model_name] = GensimVectorModel(vector_loc, binary)
     
@@ -68,7 +68,7 @@ def purge_gensim_vector_model(model_name):
         Convenience method for removing model specified by model_name from
         memory.
         
-        Note: model will lazy load itself back into memory  from disk the next
+        Note: model will lazy load itself back into memory from disk the next
         time it is called.
         
         :param model_name: the name of the model to be returned
@@ -80,6 +80,16 @@ def purge_gensim_vector_model(model_name):
         raise Exception("Model '{}' not currently loaded. Please call load_gensim_vector_model() first.".format(model_name))
     
     _models[model_name]._purge_model()
+
+def purge_all_gensim_vector_models():
+    """
+        Convenience method for removing all models from memory.
+        
+        Note: models will lazy load itself back into memory from disk the next
+        time they are called.
+    """
+    for model in _models.values():
+        model._purge_model()
 
 
 
@@ -130,6 +140,15 @@ class GensimVectorModel():
         """
         self.model = None
     
+    def get_dimensions(self):
+        """
+            Get the vector size
+            
+            :returns: number of vector dimensions
+            :rtype: int
+        """
+        return self._get_model().vector_size
+    
     def get_vector(self, word):
         """
             Get the vector corresponding to word.
@@ -146,7 +165,7 @@ class GensimVectorModel():
         try:
             vector = self._get_model()[word.lower()]
         except KeyError:
-            vector = np.zeros(self._get_model().vector_size)
+            vector = np.zeros(self.get_dimensions())
         return vector
     
     def get_similarity(self, word1, word2):

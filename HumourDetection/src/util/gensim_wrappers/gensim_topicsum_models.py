@@ -14,7 +14,7 @@ Created on Jan 22, 2017
 from gensim.models import LsiModel, LdaModel
 import numpy as np
 from scipy.spatial.distance import cosine
-import warnings
+import logging
 from util.gensim_wrappers.gensim_tfidf_models import load_gensim_tfidf_model
 
 TYPE_LSI = "lsi"
@@ -57,7 +57,7 @@ def load_gensim_topicsum_model(model_name, model_type, model_loc, tfidf_model_na
         :raises ValueError: when model_type is not either "lsi" or "lda"
     """
     if model_name in _models:
-        warnings.warn("'{}' already loaded. Will use existing instance.".format(model_name), RuntimeWarning)
+        logging.warning("'{}' already loaded. Will use existing instance.".format(model_name), RuntimeWarning)
     else:
         model_type = model_type.lower()
         if model_type == TYPE_LSI:
@@ -91,7 +91,7 @@ def purge_gensim_topicsum_model(model_name, purge_cache=True, purge_tfidf=True):
         Convenience method for removing model specified by model_name from
         memory.
         
-        Note: model will lazy load itself back into memory  from disk the next
+        Note: model will lazy load itself back into memory from disk the next
         time it is called.
         
         :param model_name: the name of the model to be returned
@@ -107,6 +107,19 @@ def purge_gensim_topicsum_model(model_name, purge_cache=True, purge_tfidf=True):
         raise Exception("Model '{}' not currently loaded. Please call load_gensim_topicsum_model() first.".format(model_name))
     
     _models[model_name]._purge_model(purge_cache, purge_tfidf)
+
+def purge_all_gensim_topicsum_models(purge_tfidf=True):
+    """
+        Convenience method for removing all models from memory.
+        
+        Note: models will lazy load itself back into memory from disk the next
+        time they are called.
+        
+        :param purge_tfidf: whether the TFIDF model should be purged too
+        :type purge_tfidf: bool
+    """
+    for model in _models.values():
+        model._purge_model()
 
 
 

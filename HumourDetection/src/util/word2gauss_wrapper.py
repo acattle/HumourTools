@@ -3,7 +3,7 @@
     
     :author: Andrew Cattle <acattle@cse.ust.hk>
 '''
-import warnings
+import logging
 from word2gauss import GaussianEmbedding
 from vocab import Vocabulary
 from scipy.spatial.distance import cosine
@@ -34,7 +34,7 @@ def load_word2gauss_model(model_name, model_loc, vocab_loc, lazy_load=True):
         :rtype: Word2GaussModel
     """
     if model_name in _models:
-        warnings.warn("'{}' already loaded. Will use existing instance.".format(model_name), RuntimeWarning)
+        logging.warning("'{}' already loaded. Will use existing instance.".format(model_name), RuntimeWarning)
     else:
         _models[model_name] = Word2GaussModel(model_loc, vocab_loc, lazy_load)
         
@@ -62,7 +62,7 @@ def purge_word2gauss_model(model_name):
         Convenience method for removing model specified by model_name from
         memory.
         
-        Note: model will lazy load itself back into memory  from disk the next
+        Note: model will lazy load itself back into memory from disk the next
         time it is called.
         
         :param model_name: the name of the model to be returned
@@ -74,6 +74,20 @@ def purge_word2gauss_model(model_name):
         raise Exception("Model '{}' not currently loaded. Please call load_word2gauss_model() first.".format(model_name))
     
     _models[model_name]._purge_model()
+
+def purge_all_word2gauss_vector_models():
+    """
+        Convenience method for removing all models from memory.
+        
+        Note: models will lazy load itself back into memory from disk the next
+        time they are called.
+    """
+    for model in _models.values():
+        model._purge_model()
+
+
+
+
 
 class Word2GaussModel(object):
     def __init__(self, model_loc, vocab_loc, lazy_load=True):
@@ -129,6 +143,15 @@ class Word2GaussModel(object):
         """
         self.voc = None
         self.w2g = None
+    
+    def get_dimensions(self):
+        """
+            Get the vector size
+            
+            :returns: number of vector dimensions
+            :rtype: int
+        """
+        return self._get_w2g().K
     
     def get_vector(self,document):
         """
@@ -204,11 +227,11 @@ class Word2GaussModel(object):
         try:
             word1_id = self._get_voc().word2id(word1)
         except KeyError:
-            warnings.warn("{} not in W2G vocab".format(word1))
+            logging.warning("{} not in W2G vocab".format(word1))
         try:
             word2_id = self._get_voc().word2id(word2)
         except KeyError:
-            warnings.warn("{} not in W2G vocab".format(word2))
+            logging.warning("{} not in W2G vocab".format(word2))
             
         if (word1_id!=None) and (word2_id!=None):
             energy = self._get_w2g().energy(word1_id, word2_id)
@@ -217,28 +240,74 @@ class Word2GaussModel(object):
         return -energy
 
 if __name__ == "__main__":
-    from util.model_name_consts import WIKIPEDIA_W2G
+    from model_name_consts import WIKIPEDIA_W2G
     w2g_vocab_loc="c:/vectors/wiki.moreselective.gz"
     w2g_model_loc="c:/vectors/wiki.hyperparam.selectivevocab.w2g"
+#     w2g_vocab_loc="/mnt/c/vectors/wiki.moreselective.gz"
+#     w2g_model_loc="/mnt/c/vectors/wiki.hyperparam.selectivevocab.w2g"
     
-    w2g = load_word2gauss_model(WIKIPEDIA_W2G, w2g_model_loc, w2g_vocab_loc)
+#     from tarfile import open as topen
+#     from contextlib import closing
+#     from timeit import default_timer as timer
+#      
+#     
+#     with topen(w2g_model_loc, "r") as fin:
+#         start = timer()
+#         with closing(fin.extractfile('parameters')) as f:
+#             file_contents = f.read()
+#              
+#             import json
+#             params = json.loads(file_contents)
+#         print ("parameters = {}s".format(timer() - start))
+#         _mu = np.empty((2 * params['N'], params['K']), dtype=np.float64)
+#         
+#         start = timer()
+#         with closing(fin.extractfile('mu_context')) as f:
+#             numpy_loaded = np.loadtxt(f, dtype=np.float64)
+# #             _mu[params['N']:, :] = np.loadtxt(f, dtype=np.float64). \
+# #                 reshape(params['N'], -1).copy()
+#         print("mu_context = {}s".format(timer() - start))
+#         
+#         import pandas
+#         start = timer()
+#         with closing(fin.extractfile('mu_context')) as f:
+#             panda_loaded = pandas.read_csv(f, header=None, sep="\s+").as_matrix()
+#         print("read_csv = {}s".format(timer() - start))
+#         
+#         print(np.array_equal(panda_loaded,numpy_loaded))
+#         print(np.allclose(panda_loaded,numpy_loaded))
+#         start = timer()
+#         with closing(fin.extractfile('sigma')) as f:
+#             _sigma = np.loadtxt(f, dtype=np.float64).reshape(params['N']*2, -1).copy()
+#         print("sigma = {}s".format(timer() - start))
+#         start = timer()
+#         with closing(fin.extractfile('acc_grad_mu')) as f:
+#             _acc_grad_mu = np.loadtxt(f, dtype=np.float64).reshape(params['N']*2, params['K']).copy()
+#         print("acc_grad_mu = {}s".format(timer() - start))
+#         start = timer()
+#         with closing(fin.extractfile('acc_grad_sigma')) as f:
+#             _acc_grad_sigma = np.loadtxt(f, dtype=np.float64). \
+#                 reshape(params['N']*2, -1).copy()
+#         print("acc_grad_sigma = {}s".format(timer() - start))
     
-    oov_v = w2g.get_vector("afasdfasgasdfgasfgasdfasdfadfs") #try to get the vector for an OOV word
+    w2g = load_word2gauss_model(WIKIPEDIA_W2G, w2g_model_loc, w2g_vocab_loc, lazy_load=False)
     
-    print("all zeros? {}".format(np.array_equal(oov_v, np.zeros(300))))
-    
-    print("similarity queen and king? {}".format(w2g.get_similarity("queen", "king")))
-    print("similarity with gibberish? {}".format(w2g.get_similarity("afasdfasgasdfgasfgasdfasdfadfs", "king")))
-    print("similarity with only some gibberish? {}".format(w2g.get_similarity("afasdfasgasdfgasfgasdfasdfadfs queen", "king")))
-    print("energy queen and king? {}".format(w2g.get_energy("queen", "king")))
-    
-    #try loading a second model
-    w2g2 = load_word2gauss_model(WIKIPEDIA_W2G, w2g_model_loc, w2g_vocab_loc)
-    print("same model? {}".format(w2g == w2g2))
-    
-    import time
-    time.sleep(10)
-    
-    purge_word2gauss_model(WIKIPEDIA_W2G)
-          
-    w2g.get_vector("king")
+#     oov_v = w2g.get_vector("afasdfasgasdfgasfgasdfasdfadfs") #try to get the vector for an OOV word
+#     
+#     print("all zeros? {}".format(np.array_equal(oov_v, np.zeros(300))))
+#     
+#     print("similarity queen and king? {}".format(w2g.get_similarity("queen", "king")))
+#     print("similarity with gibberish? {}".format(w2g.get_similarity("afasdfasgasdfgasfgasdfasdfadfs", "king")))
+#     print("similarity with only some gibberish? {}".format(w2g.get_similarity("afasdfasgasdfgasfgasdfasdfadfs queen", "king")))
+#     print("energy queen and king? {}".format(w2g.get_energy("queen", "king")))
+#     
+#     #try loading a second model
+#     w2g2 = load_word2gauss_model(WIKIPEDIA_W2G, w2g_model_loc, w2g_vocab_loc)
+#     print("same model? {}".format(w2g == w2g2))
+#     
+#     import time
+#     time.sleep(10)
+#     
+#     purge_word2gauss_model(WIKIPEDIA_W2G)
+#           
+#     w2g.get_vector("king")
