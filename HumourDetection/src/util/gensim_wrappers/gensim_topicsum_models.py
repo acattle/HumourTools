@@ -57,7 +57,7 @@ def load_gensim_topicsum_model(model_name, model_type, model_loc, tfidf_model_na
         :raises ValueError: when model_type is not either "lsi" or "lda"
     """
     if model_name in _models:
-        logging.warning("'{}' already loaded. Will use existing instance.".format(model_name), RuntimeWarning)
+        logging.warning("'{}' already loaded. Will use existing instance.".format(model_name))
     else:
         model_type = model_type.lower()
         if model_type == TYPE_LSI:

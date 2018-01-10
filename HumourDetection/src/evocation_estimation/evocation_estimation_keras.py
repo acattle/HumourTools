@@ -161,7 +161,7 @@ def main(dataset_to_test):
 #     purge_all_word2gauss_vector_models()
 #     purge_all_gensim_topicsum_models()
     
-#     save_keras_pipeline("models/{}".format(dataset_to_test), model)
+    save_keras_pipeline("models/{}".format(dataset_to_test), model)
     
     print("{}\tModel saved".format(strftime("%y-%m-%d_%H:%M:%S")))
     
