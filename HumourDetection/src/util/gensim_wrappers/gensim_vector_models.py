@@ -40,7 +40,7 @@ def load_gensim_vector_model(model_name, vector_loc, binary=True, lazy_load=True
         :rtype: GensimVectorModel
     """
     if model_name in _models:
-        logging.warning("'{}' already loaded. Will use existing instance.".format(model_name), RuntimeWarning)
+        logging.warning("'{}' already loaded. Will use existing instance.".format(model_name))
     else:
         _models[model_name] = GensimVectorModel(vector_loc, binary)
     
