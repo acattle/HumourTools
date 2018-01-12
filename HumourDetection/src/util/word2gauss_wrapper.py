@@ -220,22 +220,21 @@ class Word2GaussModel(object):
             :returns: the energy (either KL divergence or inner product, depending on the model) between word1 and word2
             :rtype: float
         """
-        energy = 0.0
         
+        energy = 0.0
         word1_id = None
-        word2_id = None
         try:
             word1_id = self._get_voc().word2id(word1)
-        except KeyError:
-            logging.warning("{} not in W2G vocab".format(word1))
-        try:
-            word2_id = self._get_voc().word2id(word2)
-        except KeyError:
-            logging.warning("{} not in W2G vocab".format(word2))
-            
-        if (word1_id!=None) and (word2_id!=None):
-            energy = self._get_w2g().energy(word1_id, word2_id)
+        except KeyError as e:
+            logging.debug("{} not in W2G vocab. Defaulting to 0.0 energy".format(word1))
         
+        if word1_id != None:
+            try:
+                word2_id = self._get_voc().word2id(word2)
+                energy = self._get_w2g().energy(word1_id, word2_id)
+            except KeyError as e:
+                logging.debug("{} not in W2G vocab. Defaulting to 0.0 energy".format(word2))
+
         #energy is -KL, so -1x to make it normal KL
         return -energy
 
