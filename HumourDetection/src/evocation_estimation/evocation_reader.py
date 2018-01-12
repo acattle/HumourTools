@@ -22,6 +22,7 @@ from collections import defaultdict
 from os.path import join
 from networkx.algorithms.centrality.load import load_centrality
 from networkx.algorithms.centrality.betweenness import betweenness_centrality
+import xml.etree.ElementTree as ET
 
 class EATGraph(object):
     def __init__(self, eat_pajek_loc):
@@ -56,6 +57,25 @@ class EATGraph(object):
     
     def get_all_associations(self):
         return self.graph.edges(data='weight', default=0)
+
+class EAT_XML_Reader():
+    def __init__(self, xml_loc):
+        self.eat_root = ET.parse(xml_loc).getroot()
+        
+    def get_all_associations(self):
+        associations=[]
+        
+        for stimulus_element in self.eat_root:
+            stimuli = stimulus_element.attrib["word"]
+            total = float(stimulus_element.attrib["all"])
+            
+            for response_element in stimulus_element:
+                response = response_element.attrib["word"]
+                count = float(response_element.attrib["n"])
+                
+                associations.append((stimuli, response, count/total))
+        
+        return associations
 
 class USFGraph(object):
     def __init__(self, usf_pajek_loc):
