@@ -20,7 +20,7 @@ from sklearn.exceptions import NotFittedError
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.neighbors import NearestNeighbors
 from humour_features.utils.common_features import get_alliteration_and_rhyme_features
-from util.gensim_wrapper import load_gensim_vector_model
+from util.gensim_wrappers.gensim_vector_models import load_gensim_vector_model
 from util.model_name_consts import GOOGLE_W2V
 
 def _convert_pos_to_wordnet(treebank_tag):
