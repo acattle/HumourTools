@@ -10,7 +10,7 @@
 '''
 from __future__ import print_function, division
 import re
-import nltk
+from nltk import pos_tag_sents
 from nltk.corpus import wordnet as wn
 import numpy as np
 from math import log
@@ -19,9 +19,11 @@ from sklearn.base import TransformerMixin
 from sklearn.exceptions import NotFittedError
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.neighbors import NearestNeighbors
-from humour_features.utils.common_features import get_alliteration_and_rhyme_features
+from humour_features.utils.common_features import get_alliteration_and_rhyme_features,\
+    get_interword_score_features
 from util.gensim_wrappers.gensim_vector_models import load_gensim_vector_model
 from util.model_name_consts import GOOGLE_W2V
+import logging
 
 def _convert_pos_to_wordnet(treebank_tag):
     if treebank_tag.startswith('J'):
@@ -35,7 +37,7 @@ def _convert_pos_to_wordnet(treebank_tag):
     else:
         return ''
 
-def train_yang_et_al_2015_pipeline(X, y, w2v_loc, wilson_lexicon_loc, k=5):
+def train_yang_et_al_2015_pipeline(X, y, w2v_loc, wilson_lexicon_loc, k=5, **rf_kwargs):
     """
         Train a  humour classifier using Yang et al. (2015)'s Word2Vec+HCF
         feature set
@@ -50,6 +52,8 @@ def train_yang_et_al_2015_pipeline(X, y, w2v_loc, wilson_lexicon_loc, k=5):
         :type wilson_lexicon_loc: str
         :param k: the number of neighbors to use for KNN features
         :type k: int
+        :param rf_kwargs: keyword arguments to be passed to the RandomForestClassifier
+        :type rf_kwargs: dict
         
         :return: A trained pipeline that takes in tokenized documents and outputs predictions
         :rtype: sklearn.pipeline.Pipeline
@@ -58,7 +62,7 @@ def train_yang_et_al_2015_pipeline(X, y, w2v_loc, wilson_lexicon_loc, k=5):
     from sklearn.pipeline import Pipeline
     from sklearn.ensemble.forest import RandomForestClassifier
     yang_pipeline = Pipeline([("extract_features", YangHumourFeatureExtractor(w2v_loc,wilson_lexicon_loc,k)),
-                              ("random_forest_classifier", RandomForestClassifier()) #TODO: more than the default 10 estimators?
+                              ("random_forest_classifier", RandomForestClassifier(**rf_kwargs))
                               ])
     yang_pipeline.fit(X,y)
     
@@ -101,7 +105,7 @@ class YangHumourFeatureExtractor(TransformerMixin):
         scikit-learn transformer, suitable for use in scikit-learn pipelines.
     """
     
-    def __init__(self, w2v_loc, wilson_lexicon_loc, k=5):
+    def __init__(self, w2v_loc, wilson_lexicon_loc, k=5, verbose=True): #TODO: verbose=False
         """
             Configure Yang et al. (2105) feature extraction options including
             Word2Vec model and Wilson et al. (2005) subjectivity lexicon
@@ -117,6 +121,8 @@ class YangHumourFeatureExtractor(TransformerMixin):
             :type wilson_lexicon_loc: str
             :param k: Specifies the number of KNN labels to extract
             :type k: int
+            :param verbose: whether we should use verbose mode or not
+            :type verbose: bool
         """
         self.w2v_loc = w2v_loc
         self.w2v_model = None
@@ -126,6 +132,9 @@ class YangHumourFeatureExtractor(TransformerMixin):
         self.knn_model = None
         self.train_y = None #will be used for KNN features
         self.knn_vectorizer = None #will be used to transform documents into input for self.knn_model
+        
+        if verbose:
+            logging.basicConfig(level=logging.DEBUG)
     
     def _get_w2v_model(self):
         """
@@ -188,22 +197,13 @@ class YangHumourFeatureExtractor(TransformerMixin):
             :return: A matrix representing the extracted incongruity features in the form (disconnection, repetition) x # of documents
             :rtype: numpy.array
         """
+        scorer = self._get_w2v_model().get_similarity
+        incong_features = get_interword_score_features(documents, scorer)
+        #Yang et al. (2015) only care about max and min Word2Vec similarities
+        #Therefore we should delete column 1 (first 1 is the column index. second 1 is axis)
+        incong_features = np.delete(incong_features, 1, 1)
         
-        feature_vectors = []
-        for document in documents:
-            disconnection = 1 #the minimum similarity between word pairs
-            repetition = -1 #the maximum similarity between word pairs
-            
-            for word1, word2 in combinations(document, 2): #for all word pairs
-                distance = self._get_w2v_model().get_similarity(word1, word2) #distance is (1 - similarity)
-                #TODO: should I ignore OOVs?
-                
-                disconnection = min(disconnection, distance)
-                repetition = max(repetition, distance)
-            
-            feature_vectors.append((disconnection, repetition))
-        
-        return np.vstack(feature_vectors)
+        return incong_features
     
     def get_ambiguity_features(self, documents):
         """
@@ -383,11 +383,15 @@ class YangHumourFeatureExtractor(TransformerMixin):
             :rtype: TransformerMixin
         """
         
-        self.train_y = y
+        self.train_y = y #save this to get labels later
+        
+        logging.debug("KNN fitting started")
         #TODO: is this the appropriate Vecotrizer?
         self.knn_vectorizer = CountVectorizer(tokenizer=lambda x:  x, preprocessor=lambda x: x) #skip tokenization and preporcessing
         X = self.knn_vectorizer.fit_transform(X)
         self.knn_model = NearestNeighbors(n_neighbors=self.k).fit(X)
+        
+        logging.debug("KNN fitting complete")
         
         return self
     
@@ -403,20 +407,24 @@ class YangHumourFeatureExtractor(TransformerMixin):
             :return: highest performing Yang et al. (2015) features as a numpy array
             :rtype: numpy.array
         """
-        
         features = []
         
+        logging.debug("Starting ambiguity features")
         features.append(self.get_ambiguity_features(X))
+        logging.debug("Starting interpersonal features")
         features.append(self.get_interpersonal_features(X))
+        logging.debug("Starting phonetic features")
         features.append(self.get_phonetic_features(X))
+        logging.debug("Starting KNN features")
         features.append(self.get_knn_features(X))
-        
+         
         #extract Word2Vec features
+        logging.debug("Starting average w2v")
         features.append(self.get_average_w2v(X))
+        logging.debug("Starting incongruity features")
         features.append(self.get_incongruity_features(X))
-        #free up memory
-#         self._purge_w2v_model()
-
+        
+        logging.debug("All features extracted")
         return np.hstack(features)
 
 class YangHumourAnchorExtractor:
@@ -425,7 +433,7 @@ class YangHumourAnchorExtractor:
         transformer, suitable for use in scikit-learn pipelines.
     """
     
-    def __init__(self,parser,humour_scorer, t=3, pos_class=1):
+    def __init__(self,parser,humour_scorer, t=3, s=2, pos_class=1):
         """
             Specify parser and humour_scorer for use in Humour Anchor
             Extraction.

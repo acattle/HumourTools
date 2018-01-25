@@ -6,10 +6,54 @@
     This module provides utility functions for extracting features which appear
     in multiple humour recognition papers
 '''
-import nltk
+from __future__ import division #for maintaining Python 2.7 support
 import numpy as np
+from nltk.corpus import cmudict
+from itertools import combinations
+from util.misc import mean
 
-def get_alliteration_and_rhyme_features(documents):
+def get_interword_score_features(documents, scorer, token_filter=None):
+    """
+        A convenience wrappper for obtaining min, max, and micro average scores
+        between all word pairs in a document, according to the supplied scorer
+        function.
+        
+        Documents can be filtered using the optional token_filter argument. E.g.
+        if token_filter is a function that removes stopwords from a document
+        then no stopwords will appear in the word pairs.
+        
+        :param documents: documents to be processed. Each document should be a sequence of tokens
+        :type documents: list(list(str))
+        :param scorer: the scoring function to use when comparing words. Must take two strings as input and return a score as a float.
+        :type scorer: function(str, str)
+        :param token_filter: function for filtering the tokens in a document. If None, no token filtering will be done
+        :type token_filter: function(list(str))
+        
+        :return: A matrix in the form (min_score, avg_score, max_score) x # of documents
+        :rtype: numpy.array
+    """
+    
+    if not token_filter: #if no filter is specified
+        def token_filter(x): return x #just return the entire document
+    
+    feature_vectors = []
+    for document in documents:
+        scores = []
+        document = token_filter(document) #get only the words of interest
+        for word1, word2 in combinations(document, 2): #for all interesting word pairs
+            #TODO: ignore OOVs? How? Failing silently on keyerrors?
+            score= scorer(word1, word2)
+            scores.append(score)
+        
+        max_score = max(scores)
+        avg_score = mean(scores)
+        min_score = min(scores)
+        
+        feature_vectors.append((min_score, avg_score, max_score))
+    
+    return np.vstack(feature_vectors)
+
+def get_alliteration_and_rhyme_features(documents, cmu_dict=None):
     """
         Utility method for extracting alliteration and rhyme chain features from
         a tokenized document based on word pronunciations in the CMU Pronouncing
@@ -27,7 +71,8 @@ def get_alliteration_and_rhyme_features(documents):
         :rtype: numpy.array
     """
     
-    cmu = nltk.corpus.cmudict.dict() #This is slow and will get called each time the function is called (training and test)
+    if not cmu_dict:
+        cmu_dict = cmudict.dict() #This is can be slow if called multiple times. Therefore we give users to option of preloading it
     
     feature_vects = []
     
@@ -36,8 +81,8 @@ def get_alliteration_and_rhyme_features(documents):
         alliteration_chains = {} #will hold alliteration chains in the form {first_phoneme:count}
         rhyme_chains = {}
         for word in document:
-            if word in cmu:
-                pronunciations = cmu[word]
+            if word in cmu_dict:
+                pronunciations = cmu_dict[word]
                 
                 first_phonemes = set()
                 end_rhymes = set()
@@ -47,10 +92,12 @@ def get_alliteration_and_rhyme_features(documents):
                     
                     first_phonemes.add(pronunciation[0])
                     
+                    #TODO: Yang only looks at last vowel, not last vowel and coda
+                    
                     i=0
                     for i, phoneme in reversed(list(enumerate(pronunciation))):
-                        #go backwards through the pronunciation
-                        if phoneme[0] in "AEIOU": #until we find the final vowel
+                        #go backwards through the pronunciation until we find the final vowel
+                        if phoneme[0] in "AEIOU": #check the first letter of the phoneme to see if it's a vowel
                             break #then stop looking but make note of the vowel's index
                         
                     end_rhymes.add("".join(pronunciation[i:])) #concatenate the final vowel with any codas
