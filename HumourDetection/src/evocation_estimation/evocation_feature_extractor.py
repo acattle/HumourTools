@@ -20,6 +20,7 @@ from util.wordnet.wordnet_graph import WordNetGraph
 from util.wordnet.wordnet_utils import WordNetUtils
 from util.word2gauss_wrapper import load_word2gauss_model
 import logging
+from util.misc import mean
 
 #TODO: Add selective feature scaling (i.e. scale everything but vectors. Or should be scale vectors too?)
 #TODO: Add a lot of documentation
@@ -254,7 +255,7 @@ class EvocationFeatureExtractor(TransformerMixin):
                 if FEAT_MAX_AUTOEX_SIM in self.features:
                     feature_vect.append(max(synset_sims))
                 if FEAT_AVG_AUTOEX_SIM in self.features:
-                    feature_vect.append(np.mean(synset_sims))
+                    feature_vect.append(mean(synset_sims))
                     
                 feature_vects.append(feature_vect)
                 
@@ -300,8 +301,8 @@ class EvocationFeatureExtractor(TransformerMixin):
                     feature_vect.append(sum(stimuli_betweennesses))
                     feature_vect.append(sum(response_betweennesses))
                 if FEAT_AVG_BETWEENNESS in self.features:
-                    feature_vect.append(np.mean(stimuli_betweennesses))
-                    feature_vect.append(np.mean(response_betweennesses))
+                    feature_vect.append(mean(stimuli_betweennesses))
+                    feature_vect.append(mean(response_betweennesses))
                 
                 feature_vects.append(feature_vect)
             
@@ -343,8 +344,8 @@ class EvocationFeatureExtractor(TransformerMixin):
                         feature_vect.append(sum(stimuli_loads))
                         feature_vect.append(sum(response_loads))
                     if FEAT_AVG_LOAD in self.features:
-                        feature_vect.append(np.mean(stimuli_loads))
-                        feature_vect.append(np.mean(response_loads))
+                        feature_vect.append(mean(stimuli_loads))
+                        feature_vect.append(mean(response_loads))
                     
                     feature_vects.append(feature_vect)
                     
@@ -454,15 +455,15 @@ class EvocationFeatureExtractor(TransformerMixin):
                 if FEAT_MAX_WUP_SIM in self.features:
                     feature_vect.append(max(wup_sims))
                 if FEAT_AVG_WUP_SIM in self.features:
-                    feature_vect.append(np.mean(wup_sims))
+                    feature_vect.append(mean(wup_sims))
                 if FEAT_MAX_PATH_SIM in self.features:
                     feature_vect.append(max(path_sims))
                 if FEAT_AVG_PATH_SIM in self.features:
-                    feature_vect.append(np.mean(path_sims))
+                    feature_vect.append(mean(path_sims))
                 if FEAT_MAX_LCH_SIM in self.features:
                     feature_vect.append(max(lch_sims))
                 if FEAT_AVG_LCH_SIM in self.features:
-                    feature_vect.append(np.mean(lch_sims))
+                    feature_vect.append(mean(lch_sims))
                 
                 feature_vects.append(np.hstack(feature_vect))
                 
