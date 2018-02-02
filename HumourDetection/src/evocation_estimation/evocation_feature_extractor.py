@@ -76,10 +76,39 @@ DEFAULT_FEATS = [FEAT_W2V_SIM,
                  FEAT_DIR_REL
                  ]
 
+#All newly implemented features should be added to this list
+ALL_FEATS = [FEAT_W2V_SIM,
+             FEAT_W2V_OFFSET,
+             FEAT_W2V_VECTORS,
+             FEAT_GLOVE_SIM,
+             FEAT_GLOVE_OFFSET,
+             FEAT_GLOVE_VECTORS,
+             FEAT_W2G_SIM,
+             FEAT_W2G_ENERGY,
+             FEAT_W2G_OFFSET,
+             FEAT_W2G_VECTORS,
+             FEAT_MAX_AUTOEX_SIM,
+             FEAT_AVG_AUTOEX_SIM,
+             FEAT_LDA_SIM,
+             FEAT_LEXVECTORS,
+             FEAT_MAX_WUP_SIM,
+             FEAT_AVG_WUP_SIM,
+             FEAT_MAX_LCH_SIM,
+             FEAT_AVG_LCH_SIM,
+             FEAT_MAX_PATH_SIM,
+             FEAT_AVG_PATH_SIM,
+             FEAT_MAX_LOAD,
+             FEAT_AVG_LOAD,
+             FEAT_TOTAL_LOAD,
+             FEAT_MAX_BETWEENNESS,
+             FEAT_AVG_BETWEENNESS,
+             FEAT_TOTAL_BETWEENNESS,
+             FEAT_DIR_REL,
+             FEAT_LESK
+             ]
 
 class EvocationFeatureExtractor(TransformerMixin):
     def __init__(self, features=DEFAULT_FEATS, lda_loc=None, wordids_loc=None, tfidf_loc=None, w2v_loc=None, autoex_loc=None, betweenness_loc=None, load_loc=None,  glove_loc=None, w2g_model_loc=None, w2g_vocab_loc=None, lesk_relations=None, verbose=True):
-        self.features = set(features)
         self.logger = logging.getLogger(__name__)
         if verbose:
             self.logger.setLevel(logging.DEBUG)
@@ -98,7 +127,25 @@ class EvocationFeatureExtractor(TransformerMixin):
         self.w2g_vocab_loc = w2g_vocab_loc
         self.lesk_relations = lesk_relations
         
+    
+    def _validate_features(self, features):
+        """
+            Method for identifying and removing unknown features.
             
+            If this method isn't run as part of __init__(), get_num_dimensions()
+            may return an incorrect number.
+        """
+        valid_feats = set(ALL_FEATS)
+        
+        unknown_feats=[]
+        for feat in features:
+            if feat not in valid_feats:
+                self.logger.warn(f"Unknown EvocationFeatureExtractor feature '{feat}' encountered. Ignoring")
+                unknown_feats.append(feat)
+                
+        feats = set(features)
+        feats.difference_update(unknown_feats)
+        return feats
     
     def get_num_dimensions(self):
         """
@@ -108,12 +155,13 @@ class EvocationFeatureExtractor(TransformerMixin):
             features are 1D, some features (e.g. FEAT_w2V_OFFSET) can be more
             than that.
             
+            Assumes features have been validated during initialization
+            
             :returns: the number of feature dimensions
             :rtype: int
         """
         feats_2d = set([FEAT_MAX_BETWEENNESS, FEAT_AVG_BETWEENNESS, FEAT_TOTAL_BETWEENNESS,
-                        FEAT_MAX_LOAD, FEAT_AVG_LOAD, FEAT_TOTAL_LOAD
-                        ])
+                        FEAT_MAX_LOAD, FEAT_AVG_LOAD, FEAT_TOTAL_LOAD])
         
         dimensions = 0
         for feature in self.features:
