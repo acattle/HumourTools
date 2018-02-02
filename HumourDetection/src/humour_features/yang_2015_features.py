@@ -43,9 +43,9 @@ def train_yang_et_al_2015_pipeline(X, y, w2v_loc, wilson_lexicon_loc, k=5, **rf_
         feature set
         
         :param X: Training documents. Each document should be a sequence of tokens.
-        :type X: list(list(str))
+        :type X: Iterable[Iterable[str]]
         :param y: training labels
-        :type y: list(int)
+        :type y: Iterable[int]
         :param w2v_loc: location of Google-style Word2Vec model (must be binary)
         :type w2v_loc: str
         :param wilson_lexicon_loc: location of Wilson et al. (2005) lexicon file
@@ -53,7 +53,7 @@ def train_yang_et_al_2015_pipeline(X, y, w2v_loc, wilson_lexicon_loc, k=5, **rf_
         :param k: the number of neighbors to use for KNN features
         :type k: int
         :param rf_kwargs: keyword arguments to be passed to the RandomForestClassifier
-        :type rf_kwargs: dict
+        :type rf_kwargs: Dict[str, Any]
         
         :return: A trained pipeline that takes in tokenized documents and outputs predictions
         :rtype: sklearn.pipeline.Pipeline
@@ -75,9 +75,9 @@ def run_yang_et_al_2015_baseline(train, test, w2v_loc,wilson_lexicon_loc):
         Yang et al. (2015)'s Word2Vec+HCF
         
         :param train: A tuple containing training documents and labels. Each document should be a sequence of tokens.
-        :type train: tuple(list(list(str)), list(int))
+        :type train: Tuple[Iterable[Iterable[str]], Iterable[int]]
         :param test: A tuple containing training documents and labels. Each document should be a sequence of tokens.
-        :type test: tuple(list(list(str)), list(int))
+        :type test: Tuple[Iterable[Iterable[str]], Iterable[int]]
         :param w2v_loc: location of Google-style Word2Vec model (must be binary)
         :type w2v_loc: str
         :param wilson_lexicon_loc: location of Wilson et al. (2005) lexicon file
@@ -133,8 +133,9 @@ class YangHumourFeatureExtractor(TransformerMixin):
         self.train_y = None #will be used for KNN features
         self.knn_vectorizer = None #will be used to transform documents into input for self.knn_model
         
+        self.logger = logging.getLogger(__name__)
         if verbose:
-            logging.basicConfig(level=logging.DEBUG)
+            self.logger.setLevel(logging.DEBUG)
     
     def _get_w2v_model(self):
         """
@@ -192,7 +193,7 @@ class YangHumourFeatureExtractor(TransformerMixin):
             Yang et al. (2015)
             
             :param documents: documents to be processed. Each document should be a sequence of tokens
-            :type documents: list(list(str))
+            :type documents: Iterable[Iterable[str]]
             
             :return: A matrix representing the extracted incongruity features in the form (disconnection, repetition) x # of documents
             :rtype: numpy.array
@@ -211,7 +212,7 @@ class YangHumourFeatureExtractor(TransformerMixin):
             Yang et al. (2015)
             
             :param documents: documents to be processed. Each document should be a sequence of tokens
-            :type documents: list(list(str))
+            :type documents: Iterable[Iterable[str]]
             
             :return: The extracted ambiguity features in the form ndarray(sense_combination, sense_farmost, sense_closest)
             :rtype: numpy.array
@@ -244,7 +245,7 @@ class YangHumourFeatureExtractor(TransformerMixin):
              
             #TODO: It's ambiguous in Yang et al. (2015) as to if we should include intra-word sense combinations
             #Or, conversely, if we should only examine intra-word sense combinations
-            #we currently only look at inter-word similarities
+            #we currently do neither, only looking at inter-word similarities
             for word1_senses, word2_senses in combinations(word_senses, 2): #for each word pair
                 for sense_pair in product(word1_senses, word2_senses): #for each synset pair
                     _cache_key = tuple(sorted(sense_pair)) #sort to force consistent ordering. tuple to make it hashable
@@ -274,7 +275,7 @@ class YangHumourFeatureExtractor(TransformerMixin):
             4.3 of Yang et al. (2015)
             
             :param documents: documents to be processed. Each document shoudl be a sequence of tokens
-            :type documents: list(list(str))
+            :type documents: Iterable[Iterable[str]]
             
             :return: A matrix of the extracted interpersonal features where eat row is the form (neg_polarity, pos_polarity, weak_subjectivity, strong_subjectivity)
             :rtype: numpy.array
@@ -308,7 +309,7 @@ class YangHumourFeatureExtractor(TransformerMixin):
             Yang et al. (2015)
             
             :param documents: documents to be processed. Each document is a sequence of tokens
-            :type documents: list(list(str))
+            :type documents: Iterable[Iterable[str]]
             
             :return: a matrix where columns represent extracted phonetic style features in the form (alliteration_num, alliteration_len, rhyme_num, rhyme_len) and rows are documents
             :rtype: numpy.array
@@ -331,7 +332,7 @@ class YangHumourFeatureExtractor(TransformerMixin):
             See https://vimeo.com/173994665 for details
             
             :param documents: documents to be processed. Each document should be as a sequence of tokens
-            :type documents: list(list(str))
+            :type documents: Iterable[Iterable[str]]
             
             :return: a matrix of the averaged vectors of all words in each document
             :rtype: numpy.array
@@ -357,7 +358,7 @@ class YangHumourFeatureExtractor(TransformerMixin):
             The K is specified during class initialization.
             
             :param documents: documents to be processed. Each document is a sequence of tokens
-            :type documents: list(list(str))
+            :type documents: Iterable[Iterable[str]]
             
             :returns: a matrix where columns represent labels of the K nearest training examples and rows are documents
             :rtype: numpy.array
@@ -387,13 +388,13 @@ class YangHumourFeatureExtractor(TransformerMixin):
         
         self.train_y = y #save this to get labels later
         
-        logging.debug("KNN fitting started")
+        self.logger.debug("KNN fitting started")
         #TODO: is this the appropriate Vecotrizer?
         self.knn_vectorizer = CountVectorizer(tokenizer=lambda x:  x, preprocessor=lambda x: x) #skip tokenization and preporcessing
         X = self.knn_vectorizer.fit_transform(X)
         self.knn_model = NearestNeighbors(n_neighbors=self.k).fit(X)
         
-        logging.debug("KNN fitting complete")
+        self.logger.debug("KNN fitting complete")
         
         return self
     
@@ -404,29 +405,29 @@ class YangHumourFeatureExtractor(TransformerMixin):
             (2015)
             
             :param X: pre-tokenized documents
-            :type X: list(list(str))
+            :type X: Iterable[Iterable[str]]
             
             :return: highest performing Yang et al. (2015) features as a numpy array
             :rtype: numpy.array
         """
         features = []
         
-        logging.debug("Starting ambiguity features")
+        self.logger.debug("Starting ambiguity features")
         features.append(self.get_ambiguity_features(X))
-        logging.debug("Starting interpersonal features")
+        self.logger.debug("Starting interpersonal features")
         features.append(self.get_interpersonal_features(X))
-        logging.debug("Starting phonetic features")
+        self.logger.debug("Starting phonetic features")
         features.append(self.get_phonetic_features(X))
-        logging.debug("Starting KNN features")
+        self.logger.debug("Starting KNN features")
         features.append(self.get_knn_features(X))
          
         #extract Word2Vec features
-        logging.debug("Starting average w2v")
+        self.logger.debug("Starting average w2v")
         features.append(self.get_average_w2v(X))
-        logging.debug("Starting incongruity features")
+        self.logger.debug("Starting incongruity features")
         features.append(self.get_incongruity_features(X))
         
-        logging.debug("All features extracted")
+        self.logger.debug("All features extracted")
         return np.hstack(features)
 
 class YangHumourAnchorExtractor:
@@ -440,12 +441,14 @@ class YangHumourAnchorExtractor:
             Specify parser and humour_scorer for use in Humour Anchor
             Extraction.
             
-            :param parser: parser object. Must implement parser.parse(list(str)) and use Penn Treebank tags
-            :type parser: function(list(str))
+            :param parser: Parser function. Must take  a list of strings and return an nltk.Tree using Penn Treebank tags
+            :type parser: Callable[[Iterable[str]], nltk.Tree]
             :param humour_scorer: pipeline for scoring humour. Must take bag-of-words as input
             :type humour_scorer: sklearn.pipeline.Pipeline
-            :param t: the maximum size of humour anchor
+            :param t: the maximum number of humour anchors
             :type t: int
+            :param s: the minimum number of humour anchors
+            :type s: int
             :param pos_class: humour_scorer's posivite humour class
             :type pos_class: int
         """
@@ -463,10 +466,10 @@ class YangHumourAnchorExtractor:
             in Yang et al. (2015)
             
             :param document: document to be processed as a sequence of tokens
-            :type document: list(str)
+            :type document: List[str]
             
             :return: list of candidate humour anchors
-            :rtype: list(list(str))
+            :rtype: List[List[str]]
         """
         
         parse = self.parse(document)

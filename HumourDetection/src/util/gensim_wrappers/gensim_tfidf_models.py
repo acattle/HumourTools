@@ -31,7 +31,7 @@ def load_gensim_tfidf_model(model_name, word_ids_loc, tfidf_model_loc, tokenizer
         :param tfidf_model_loc: the location of the Gensim TFIDF model
         :type tfidf_model_loc: str
         :param tokenizer: the document tokenization function. Must take a single str argument and return a list of strs
-        :type tokenizer: function(str)
+        :type tokenizer: Callable[[str], List[str]]
         :param lazy_load: specifies whether the model should be lazy_loaded
         :type lazy_load: bool
         
@@ -108,7 +108,7 @@ class GensimTFIDFModel(object):
             :param tfidf_model_loc: the location of the Gensim TFIDF model
             :type tfidf_model_loc: str
             :param tokenizer: the document tokenization function. Must take a single str argument and return a list of strs
-            :type tokenizer: function(str)
+            :type tokenizer: Callable[[str], List[str]]
             :param lazy_load: specifies whether the model should be lazy_loaded
             :type lazy_load: bool
         """

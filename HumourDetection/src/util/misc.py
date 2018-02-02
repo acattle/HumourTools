@@ -18,7 +18,7 @@ def default_preprocessing_and_tokenization(documents):
         has its punctuation removed.
         
         :param documents: the documents to be processed
-        :type documents: list(str)
+        :type documents: Iterable[str]
     """
     preprocessed_documents = []
     
@@ -43,7 +43,7 @@ def mean(l):
         converted to a numpy.array first.
         
         :param l: the list of values to be averaged
-        :type l: list(float)
+        :type l: Iterable[float]
         
         :returns: the arithmetic mean of l
         :rtype: float

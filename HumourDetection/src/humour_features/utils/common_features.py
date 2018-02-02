@@ -23,11 +23,11 @@ def get_interword_score_features(documents, scorer, token_filter=None):
         then no stopwords will appear in the word pairs.
         
         :param documents: documents to be processed. Each document should be a sequence of tokens
-        :type documents: list(list(str))
+        :type documents: Iterable[Iterable[str]]
         :param scorer: the scoring function to use when comparing words. Must take two strings as input and return a score as a float.
-        :type scorer: function(str, str)
+        :type scorer: Callable[[str, str], Number]
         :param token_filter: function for filtering the tokens in a document. If None, no token filtering will be done
-        :type token_filter: function(list(str))
+        :type token_filter: Callable[[Iterable[str]], Iterable[str]]
         
         :return: A matrix in the form (min_score, avg_score, max_score) x # of documents
         :rtype: numpy.array
@@ -65,7 +65,7 @@ def get_alliteration_and_rhyme_features(documents, cmu_dict=None):
         final vowel phoneme + trailing codas.
         
         :param documents: documents to be processed. Each document is a sequence of tokens
-        :type documents: list(list(str))
+        :type documents: Iterable[Iterable[str]]
         
         :return: a matrix where columns represent extracted phonetic style features in the form (alliteration_num, alliteration_len, rhyme_num, rhyme_len) and rows are documents
         :rtype: numpy.array

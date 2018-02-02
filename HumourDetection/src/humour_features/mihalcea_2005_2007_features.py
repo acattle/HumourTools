@@ -34,9 +34,9 @@ def train_mihalcea_strapparava_2005_pipeline(X, y, wnd_loc, content_model="svm")
         Strapparava (2005)
         
         :param X: Training documents. Each document should be a sequence of tokens.
-        :type X: list(list(str))
+        :type X: Iterable[Iterable[str]]
         :param y: training labels
-        :type y: list(int)
+        :type y: Iterable[int]
         :param wnd_loc: location of WordNet Domains file
         :type wnd_loc: str
         :param content_model: type of content model to use for content features. Must be "nb" or "svm"
@@ -49,7 +49,10 @@ def train_mihalcea_strapparava_2005_pipeline(X, y, wnd_loc, content_model="svm")
     #Mihalcea and Strapparava (2005) uses TimBL, which seems to just be a modified KNN that remembers fewer datapoints.
     #Sklearn doesn't implement that, but it does implement KNN (and computers have come a long way in the lst 12 years)
     from sklearn.neighbors.classification import KNeighborsClassifier
+    from sklearn.preprocessing.data import StandardScaler
+    
     mihalcea2005_pipeline = Pipeline([("feature_extraction", MihalceaFeatureExtractor(wnd_loc, content_model)),
+                                      ("scale", StandardScaler()),
                                       ("knn_classifier", KNeighborsClassifier())
                                       ])
     
@@ -63,9 +66,9 @@ def train_mihalcea_pulman_2007_pipeline(X,y):
         Pulman (2007)
         
         :param X: Training documents. Each document should be a sequence of tokens.
-        :type X: list(list(str))
+        :type X: Iterable[Iterable[str]]
         :param y: training labels
-        :type y: list(int)
+        :type y: Iterable[int]
         
         :return: A trained pipeline that takes in tokenized documents and outputs predictions
         :rtype: sklearn.pipeline.Pipeline
@@ -78,9 +81,9 @@ def run_mihalcea_strapparava_2005_baseline(train, test, wnd_loc, content_model="
         classification experiment on a specified dataset.
         
         :param train: A tuple containing training documents and labels. Each document should be a sequence of tokens.
-        :type train: tuple(list(list(str)), list(int))
+        :type train: Tuple[Iterable[Iterable[str]], Iterable[int]]
         :param test: A tuple containing training documents and labels. Each document should be a sequence of tokens.
-        :type test: tuple(list(list(str)), list(int))
+        :type test: Tuple[Iterable[Iterable[str]], Iterable[int]]
         :param wnd_loc: location of WordNet Domains file
         :type wnd_loc: str
         :param content_model: type of content model to use for content features. Must be "nb" or "svm"
@@ -107,9 +110,9 @@ def run_mihalcea_pulman_2007_baseline(train,test):
         classification experiment on a specified dataset.
         
         :param train: A tuple containing training documents and labels. Each document should be a sequence of tokens.
-        :type train: tuple(list(list(str)), list(int))
+        :type train: Tuple[Iterable[Iterable[str]], Iterable[int]]
         :param test: A tuple containing training documents and labels. Each document should be a sequence of tokens.
-        :type test: tuple(list(list(str)), list(int))
+        :type test: Tuple[Iterable[Iterable[str]], Iterable[int]]
     """
     pass
 
@@ -120,13 +123,12 @@ class MihalceaFeatureExtractor(TransformerMixin):
         suitable for use in scikit-learn pipelines.
     """
     
-    def __init__(self, wnd_loc, content_model="svm"):
+    def __init__(self, wnd_loc, content_model="nb"):
         """
             Configure Mihalcea-inspired feature extraction options
             
             :param wnd_loc: the location of the WordNet Domains file
             :type wnd_loc: str
-            :param content_model: the type of classifier to train for content-based features. Must be "nb" or "svm"
             :param content_model: the type of classifier to train for content-based features. Must be "nb" (for Multinomial Naive Bayes) or "svm" (for Support Vector Machine)
             :type content_model: str
         """
@@ -156,10 +158,10 @@ class MihalceaFeatureExtractor(TransformerMixin):
             Section 3.1.1 of Mihalcea and Strapparava (2005)
             
             :param documents: documents to be processed. Each document is a sequence of tokens
-            :type documents: list(list(str))
+            :type documents: Iterable[Iterable[str]]
             
             :return: a matrix where columns represent extracted phonetic style features in the form (alliteration_num, rhyme_num) and rows are documents
-            :rtype: numpy.array
+            :rtype: numpy.array[int]
         """
         
         allit_features = get_alliteration_and_rhyme_features(documents)
@@ -174,10 +176,10 @@ class MihalceaFeatureExtractor(TransformerMixin):
             Mihalcea and Strapparava (2005)
             
             :param documents: documents to be processed. Each document is a sequence of tokens
-            :type documents: list(list(str))
+            :type documents: Iterable[Iterable[str]]
             
-            :return: a matrix where columns represent extracted phonetic style features in the form (alliteration_num, rhyme_num) and rows are documents
-            :rtype: numpy.array
+            :return: an array of antonymy counts for each document
+            :rtype: numpy.array[int]
         """
         #TODO: include "similar-to" for abjectives (as per Mihalcea 2005 paper)?
         #TODO: how to speed up?
@@ -215,13 +217,11 @@ class MihalceaFeatureExtractor(TransformerMixin):
             Mihalcea and Strapparava (2005)
             
             :param documents: documents to be processed. Each document is a sequence of tokens
-            :type documents: list(list(str))
+            :type documents: Iterable[Iterable[str]]
             
-            :return: a matrix where columns represent extracted phonetic style features in the form (alliteration_num, rhyme_num) and rows are documents
-            :rtype: numpy.array
+            :return: an array of the extracted adult slang count for each document
+            :rtype: numpy.array[int]
         """
-        
-        wnd = self._get_wordnet_domains()
         
         feature_vects = []
         for document in documents:
@@ -248,10 +248,10 @@ class MihalceaFeatureExtractor(TransformerMixin):
             Mihalcea and Strapparava (2005)
             
             :param documents: documents to be processed. Each document is a sequence of tokens
-            :type documents: list(list(str))
+            :type documents: Iterable[Iterable[str]]
             
-            :return: a matrix where columns represent extracted phonetic style features in the form (alliteration_num, rhyme_num) and rows are documents
-            :rtype: numpy.array
+            :return: an array of humour label predictions for each document
+            :rtype: numpy.array[int]
             
             :raises NotFittedError: If content model hasn't been initialized
         """
@@ -295,7 +295,7 @@ class MihalceaFeatureExtractor(TransformerMixin):
             and Strapparava (2005)
             
             :param X: pre-tokenized documents
-            :type X: list(list(str))
+            :type X: Iterable[Iterable[str]]
             
             :return: highest performing Mihalcea and Strapparava (2005) features as a numpy array
             :rtype: numpy.array
@@ -312,7 +312,8 @@ class MihalceaFeatureExtractor(TransformerMixin):
 
 if __name__ == "__main__":
     potd_loc = "D:/datasets/pun of the day/puns_pos_neg_data.csv"
-    oneliners_loc = "D:/datasets/16000 oneliners/Jokes16000.txt"
+    oneliners_pos_loc = "D:/datasets/16000 oneliners/Jokes16000.txt"
+    oneliners_neg_loc = "D:/datasets/16000 oneliners/MIX16000.txt"
     wnd_loc = "C:/vectors/lifted-wordnet-domains-develop/wordnet-domains-3.2-wordnet-3.0.txt"
     
 #     potd_loc = "/mnt/d/datasets/pun of the day/puns_pos_neg_data.csv"
@@ -320,22 +321,43 @@ if __name__ == "__main__":
 #     wnd_loc = "/mnt/c/vectors/lifted-wordnet-domains-develop/wordnet-domains-3.2-wordnet-3.0.txt"
     
     docs_and_labels=[]
-    with open(potd_loc, "r") as potd_f:
-        potd_f.readline() #pop the header
-         
-        for line in potd_f:
-            label, doc = line.split(",")
-            docs_and_labels.append((doc.split(), int(label)))
-            #potd is pre-tokenized
+#     with open(potd_loc, "r") as potd_f:
+#         potd_f.readline() #pop the header
+#           
+#         for line in potd_f:
+#             label, doc = line.split(",")
+#             docs_and_labels.append((doc.split(), int(label)))
+#             #potd is pre-tokenized
+
+    import nltk
+    for file_loc, label in ((oneliners_pos_loc,1),(oneliners_neg_loc,-1)):
+        with open(file_loc, "r", encoding="ansi") as oneliners_f:
+            for line in oneliners_f:
+                doc = nltk.word_tokenize(line.lower())
+                docs_and_labels.append((doc, label))
+            
      
     import random
     random.seed(10)
     random.shuffle(docs_and_labels)
      
     test_size = round(len(docs_and_labels)*0.1) #hold out 10% as test
-     
+#     test_size = 0
+      
     test = zip(*docs_and_labels[:test_size]) #unzip the documents and labels
     train = zip(*docs_and_labels[test_size:])
-      
-      
-    run_mihalcea_strapparava_2005_baseline(train, test, wnd_loc)
+    
+    test_X, test_y = test
+    
+    mihalcea =  MihalceaFeatureExtractor(wnd_loc)
+    mihalcea.fit(*train)
+    y_pred = mihalcea.get_content_features(test_X)
+    from sklearn.metrics import precision_recall_fscore_support, accuracy_score
+    p,r,f,_ = precision_recall_fscore_support(test_y, y_pred, average="binary")
+    a = accuracy_score(test_y, y_pred)
+    print("Mihalcea and Strapparava (2005) Humour Classification")
+    print("Accuracy: {}".format(a))
+    print("Precision: {}".format(p))
+    print("Recall: {}".format(r))
+    print("F-Score: {}".format(f))
+#     run_mihalcea_strapparava_2005_baseline(train, test, wnd_loc)

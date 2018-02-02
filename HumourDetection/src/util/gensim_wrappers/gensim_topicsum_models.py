@@ -45,7 +45,7 @@ def load_gensim_topicsum_model(model_name, model_type, model_loc, tfidf_model_na
         :param tfidf_model_loc: the location of the Gensim TFIDF model
         :type tfidf_model_loc: str
         :param tokenizer: the document tokenization function. Must take a single str argument and return a list of strs
-        :type tokenizer: function(str)
+        :type tokenizer: Callable[[str], List[str]]
         :param cache: specifies whether doc summary results should be cached
         :type cache: bool
         :param lazy_load: specifies whether the model should be lazy_loaded
@@ -193,7 +193,7 @@ class GensimTopicSumModel(object):
             Convenience method for converting Gensim model output to a numpy array
             
             :param tuples: the output of a Gensim topic summarization model
-            :type tuples: list(tuple(int, float))
+            :type tuples: Iterable[Tuple[int, float]]
             
             :returns: the topic scores as a nummpy array
             :rtype: np.array
@@ -258,7 +258,7 @@ class GensimLDAModel(GensimTopicSumModel):
             :param tfidf_model_loc: the location of the Gensim TFIDF model
             :type tfidf_model_loc: str
             :param tokenizer: the document tokenization function. Must take a single str argument and return a list of strs
-            :type tokenizer: function(str)
+            :type tokenizer: Callable[[str], List[str]]
             :param cache: specifies whether doc summary results should be cached
             :type cache: bool
             :param lazy_load: specifies whether the model should be lazy_loaded
@@ -295,7 +295,7 @@ class GensimLSIModel(GensimTopicSumModel):
             :param tfidf_model_loc: the location of the Gensim TFIDF model
             :type tfidf_model_loc: str
             :param tokenizer: the document tokenization function. Must take a single str argument and return a list of strs
-            :type tokenizer: function(str)
+            :type tokenizer: Callable[[str], List[str]]
             :param cache: specifies whether doc summary results should be cached
             :type cache: bool
             :param lazy_load: specifies whether the model should be lazy_loaded

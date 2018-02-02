@@ -80,6 +80,12 @@ DEFAULT_FEATS = [FEAT_W2V_SIM,
 class EvocationFeatureExtractor(TransformerMixin):
     def __init__(self, features=DEFAULT_FEATS, lda_loc=None, wordids_loc=None, tfidf_loc=None, w2v_loc=None, autoex_loc=None, betweenness_loc=None, load_loc=None,  glove_loc=None, w2g_model_loc=None, w2g_vocab_loc=None, lesk_relations=None, verbose=True):
         self.features = set(features)
+        self.logger = logging.getLogger(__name__)
+        if verbose:
+            self.logger.setLevel(logging.DEBUG)
+        self.verbose_interval = 1000
+        
+        self.features = self._validate_features(features)
         self.lda_loc = lda_loc
         self.wordids_loc = wordids_loc
         self.tfidf_loc = tfidf_loc
@@ -92,10 +98,7 @@ class EvocationFeatureExtractor(TransformerMixin):
         self.w2g_vocab_loc = w2g_vocab_loc
         self.lesk_relations = lesk_relations
         
-        if verbose:
-            logging.basicConfig(level=logging.DEBUG)
             
-        self.verbose_interval = 1000
     
     def get_num_dimensions(self):
         """
@@ -261,7 +264,7 @@ class EvocationFeatureExtractor(TransformerMixin):
                 
                 processed += 1
                 if not (processed % self.verbose_interval):
-                    logging.debug("{}/{} done".format(processed, total))
+                    self.logger.debug("{}/{} done".format(processed, total))
                         
         else:
             feature_vects = [[]] * len(stimuli_response) #default to empty feature set
@@ -370,7 +373,7 @@ class EvocationFeatureExtractor(TransformerMixin):
                 
                 processed += 1
                 if not (processed % self.verbose_interval):
-                    logging.debug("{}/{} done".format(processed, total))
+                    self.logger.debug("{}/{} done".format(processed, total))
         
         else:
             feature_vects = [[]] * len(stimuli_response) #default to empty feature set
@@ -469,7 +472,7 @@ class EvocationFeatureExtractor(TransformerMixin):
                 
                 processed+=1
                 if not (processed % self.verbose_interval):
-                    logging.debug("{}/{} done".format(processed, total))
+                    self.logger.debug("{}/{} done".format(processed, total))
         
         else:
             feature_vects = [[]] * len(stimuli_response) #default to empty feature set
@@ -492,7 +495,7 @@ class EvocationFeatureExtractor(TransformerMixin):
                 
                 processed += 1
                 if not (processed % self.verbose_interval):
-                    logging.debug("{}/{} done".format(processed, total))
+                    self.logger.debug("{}/{} done".format(processed, total))
         
         else:
             feature_vects = [[]] * len(stimuli_response)
@@ -503,44 +506,44 @@ class EvocationFeatureExtractor(TransformerMixin):
         stimuli_response = [(stimuli.lower(), response.lower()) for stimuli, response in stimuli_response]
         feature_vects = []
         
-        logging.debug("starting lda")
+        self.logger.debug("starting lda")
         feature_vects.append(self.get_lda_feats(stimuli_response))
-        logging.debug("lda done")
+        self.logger.debug("lda done")
          
-        logging.debug("starting autoex")
+        self.logger.debug("starting autoex")
         feature_vects.append(self.get_autoex_feats(stimuli_response))
-        logging.debug("autoex done")
+        self.logger.debug("autoex done")
          
-        logging.debug("starting betweenness")
+        self.logger.debug("starting betweenness")
         feature_vects.append(self.get_wn_betweenness(stimuli_response))
-        logging.debug("betweenness done")
+        self.logger.debug("betweenness done")
         
-        logging.debug("starting load")
+        self.logger.debug("starting load")
         feature_vects.append(self.get_wn_load(stimuli_response))
-        logging.debug("load done")
+        self.logger.debug("load done")
         
-        logging.debug("starting w2v")
+        self.logger.debug("starting w2v")
         feature_vects.append(self.get_w2v_feats(stimuli_response))
-        logging.debug("w2v done")
+        self.logger.debug("w2v done")
         
-        logging.debug("starting glove")
+        self.logger.debug("starting glove")
         feature_vects.append(self.get_glove_feats(stimuli_response))
-        logging.debug("glove done")
+        self.logger.debug("glove done")
         
-        logging.debug("starting w2g")
+        self.logger.debug("starting w2g")
         feature_vects.append(self.get_w2g_feats(stimuli_response))
-        logging.debug("w2g done")
+        self.logger.debug("w2g done")
        
-        logging.debug("starting dirrels")
+        self.logger.debug("starting dirrels")
         feature_vects.append(self.get_dir_rel(stimuli_response))
-        logging.debug("dirrels done")
+        self.logger.debug("dirrels done")
        
-        logging.debug("starting wordnet feats")
+        self.logger.debug("starting wordnet feats")
         feature_vects.append(self.get_wn_feats(stimuli_response))
-        logging.debug("wordnet feats done")
+        self.logger.debug("wordnet feats done")
          
-        logging.debug("starting extended lesk")
+        self.logger.debug("starting extended lesk")
         feature_vects.append(self.get_extended_lesk_feats(stimuli_response))
-        logging.debug("extended lesk done")
+        self.logger.debug("extended lesk done")
         
         return np.hstack(feature_vects)

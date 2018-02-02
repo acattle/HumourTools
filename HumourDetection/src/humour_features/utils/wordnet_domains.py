@@ -46,6 +46,6 @@ class WordNetDomains():
             :type synset_name: str
             
             :return: list of relevant domains
-            :rtype: list(str)
+            :rtype: Iterable[str]
         """
         return self.synset_domain_map.get(synset_name, [])
