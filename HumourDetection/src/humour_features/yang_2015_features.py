@@ -105,7 +105,7 @@ class YangHumourFeatureExtractor(TransformerMixin):
         scikit-learn transformer, suitable for use in scikit-learn pipelines.
     """
     
-    def __init__(self, w2v_loc, wilson_lexicon_loc, k=5, verbose=True): #TODO: verbose=False
+    def __init__(self, w2v_loc, wilson_lexicon_loc, k=5, verbose=False):
         """
             Configure Yang et al. (2105) feature extraction options including
             Word2Vec model and Wilson et al. (2005) subjectivity lexicon
@@ -216,16 +216,18 @@ class YangHumourFeatureExtractor(TransformerMixin):
             :return: The extracted ambiguity features in the form ndarray(sense_combination, sense_farmost, sense_closest)
             :rtype: numpy.array
         """
-        
+        #TODO: currently I am assuming that each document is 1 sentence. If this isn't True it might affect pos_tag performance
         _cache = {}# caching results  during batch processing resulted in a 33% speedup on Pun of the Day dataset
         
+        #nltk's pos_tag and pos_tag_sents both load a POS tagger from pickle.
+        #Therefore, POS tagging all documents at once reduces disk i/o; faster
+        pos_tagged_documents = pos_tag_sents(documents)
+        
         feature_vectors = []
-#         total = len(documents)
-#         processed=0
-        for document in documents:
+        for pos_tagged_document in pos_tagged_documents:
             word_senses = []
-            sense_product = 1 #the running product of the numbner of word senses
-            for token, pos in nltk.pos_tag(document):
+            sense_product = 1 #the running product of the number of word senses
+            for token, pos in pos_tagged_document:
                 wn_pos = _convert_pos_to_wordnet(pos) # returns anrsv or empty string
                 senses = wn.synsets(token, wn_pos)  #using empty string as pos makes this function return an empty set
                 
@@ -338,7 +340,7 @@ class YangHumourFeatureExtractor(TransformerMixin):
         averaged_w2vs=[]
         for document in documents:
             #TODO: Should we omit OOV words?
-            sum_vector = np.zeros(300) #TODO: automatically detect vector length?
+            sum_vector = np.zeros(self._get_w2v_model().get_dimensions()) #initialize sum to be a vector of 0s the same dimensions as the model
             for word in document:
                 sum_vector = sum_vector + self._get_w2v_model().get_vector(word)
             
@@ -447,10 +449,12 @@ class YangHumourAnchorExtractor:
             :param pos_class: humour_scorer's posivite humour class
             :type pos_class: int
         """
+        #TODO: instead of List[str] should we use just str?
         
-        self.parser = parser
+        self.parse = parser
         self.humour_scorer = humour_scorer
         self.t = t
+        self.s = s
         self.pos_class = pos_class
     
     def get_anchor_candidates(self, document):
@@ -465,9 +469,7 @@ class YangHumourAnchorExtractor:
             :rtype: list(list(str))
         """
         
-        parse = self.parser.parse(document)
-#         import sys;sys.path.append(r'/mnt/c/Users/Andrew/.p2/pool/plugins/org.python.pydev_6.2.0.201711281614/pysrc')
-#         import pydevd;pydevd.settrace()
+        parse = self.parse(document)
 
         #add all NP, VP, ADJP, or AVBP that are "minimal parse subtrees". I think this means doesn't contain and phrases, just terminals
         candidates = set()
@@ -475,13 +477,18 @@ class YangHumourAnchorExtractor:
             #height==3 because according to nltk.Tree docs: "height of a tree containing only leaves is 2"
             #we want one layer about that.
             if subtree.label() in ["NP", "VP", "ADJP", "ADVP"]:
-                candidates.add(tuple([re.sub("\W", "", l.lower()) for l in subtree.leaves()])) #add ordered tuple of leaves
+                
+                filtered_words = tuple([word.lower() for word, pos in subtree.pos() if pos not in ["DT", "PRP", ",", ":", "."]])
+                if filtered_words:
+                    candidates.add(filtered_words) #add ordered tuple of leaves
+                #TODO: do we really want to ignore determiners?
                 #TODO: filter out determiners and other POSes?
             
         #add remaining nouns and verbs
         for word, pos in parse.pos():
             if pos.startswith("NN") or pos.startswith("VB"):
-                if all(word not in candidate for candidate in candidates): #if the word is not part of any existing candidate
+                if ((not pos.startswith("PRP")) and #ignore personal pronouns #TODO: Is this needed? I originally confused PRP for NNP
+                        all(word not in candidate for candidate in candidates)): #if the word is not part of any existing candidate
                     candidates.add((re.sub("\W", "", word.lower()),))
                     #TODO: checking if we're looking at the same subtree?
         
@@ -490,30 +497,35 @@ class YangHumourAnchorExtractor:
     def find_humour_anchors(self, document):
         candidates = self.get_anchor_candidates(document)
         
-        documents_minus_subsets = []
+        #TODO: better, more transparent implementation
+        from nltk.tokenize import word_tokenize
+        document = word_tokenize(document)
+        
+        documents_minus_subsets = [document] #we want to make sure we get a baseline humour score
         anchors = []
-        for i in range(self.t+1):
+        for i in range(self.s, self.t+1):
             for anchor_comb in combinations(candidates, i):
                 #for all combinations of anchors <= t (including the empty set)
                 anchors.append(anchor_comb)
                 words_to_remove = set(word for anchor in anchor_comb for word in anchor) #flatten candidates
                 documents_minus_subsets.append([word for word in document if word not in words_to_remove]) #remove words from document
-        
-        humour_probs = self.humour_scorer.predict_proba(documents_minus_subsets)
-        
+                
+#         import sys;sys.path.append(r'/mnt/c/Users/Andrew/.p2/pool/plugins/org.python.pydev_6.2.0.201711281614/pysrc')
+#         import pydevd;pydevd.settrace(stdoutToServer=True, stderrToServer=True)
+        humour_probs = self.humour_scorer.predict_log_proba(documents_minus_subsets)
+          
         #get only the positive label column
         pos_index = np.where(self.humour_scorer.classes_ == self.pos_class)[0][0] #get the positive column index
         humour_probs = humour_probs[:,pos_index] #all rows, only the positive column
         
-        base_humour_score = humour_probs[0] #get score for document with empty set of anchors
-        decrements =  base_humour_score - humour_probs[1:]
-        max_decrement_arg = np.argmax(decrements) + 1 #find the index with the highest value. +1 since we want to skip the empty set in anchors[0]
+        baseline_score = humour_probs[0] #get score for document with no anchors removed
+        decrements =  baseline_score - humour_probs[1:]
+        max_decrement_arg = np.argmax(decrements)#find the index with the highest value
         
         return anchors[max_decrement_arg]
 
     #TODO: What do they mean by "closest in meaning" for KNN?
     
-    #TODO: refactor transform so that the for loops are inside the individual features?
 if __name__ == "__main__":
     potd_loc = "D:/datasets/pun of the day/puns_pos_neg_data.csv"
     oneliners_loc = "D:/datasets/16000 oneliners/Jokes16000.txt"
@@ -528,55 +540,71 @@ if __name__ == "__main__":
     docs_and_labels=[]
     with open(potd_loc, "r") as potd_f:
         potd_f.readline() #pop the header
-         
+              
         for line in potd_f:
             label, doc = line.split(",")
             docs_and_labels.append((doc.split(), int(label)))
             #potd is pre-tokenized
-     
+          
     import random
     random.seed(10)
     random.shuffle(docs_and_labels)
-     
-# #     test_size = round(len(docs_and_labels)*0.1) #hold out 10% as test
-# #     
-# #     test_X, test_y = zip(*docs_and_labels[:test_size]) #unzip the documents and labels
-# #     train_X, train_y = zip(*docs_and_labels[test_size:])
-#      
-#      
-# #     yang = YangHumourFeatureExtractor(w2v_loc,wilson_lexicon_loc)
-# #     import timeit
-# #     t=timeit.timeit("YangHumourFeatureExtractor(None,None,n_jobs=3,manager=manager).get_ambiguity_features_pool(train_X)", "from __main__ import YangHumourFeatureExtractor, train_X, manager",number=1)
-# #     print("main + 3 threads + shared cache: {} seconds".format(t))
-# #     t=timeit.timeit("YangHumourFeatureExtractor(None,None).get_ambiguity_features_single(train_X)", "from __main__ import YangHumourFeatureExtractor, train_X",number=1)
-# #     print("main thread only + caching: {} seconds".format(t))
-# #     print(timeit.timeit("YangHumourFeatureExtractor(None,None,n_jobs=1).get_ambiguity_features_pool(train_X)", "from __main__ import YangHumourFeatureExtractor, train_X",number=1))
-# #     print(timeit.timeit("YangHumourFeatureExtractor(None,None).get_ambiguity_features_filtered(train_X,False)", "from __main__ import YangHumourFeatureExtractor, train_X",number=1))
-#      
-# #     print(timeit.timeit("run_yang_et_al_2015_baseline((train_X, train_y), (test_X, test_y), w2v_loc, wilson_lexicon_loc,n_jobs=4)", "from __main__ import run_yang_et_al_2015_baseline,train_X,train_y,test_X,test_y,w2v_loc,wilson_lexicon_loc",number=1))
-#  
-#     X,y = zip(*docs_and_labels)
-#     yang = train_yang_et_al_2015_pipeline(X, y, w2v_loc, wilson_lexicon_loc)
-#     print("training complete\n\n")
+          
+#     test_size = round(len(docs_and_labels)*0.1) #hold out 10% as test
 #     
-#     #save the model
-#     yang.named_steps["extract_features"]._purge_w2v_model() #smaller pkl
-    import dill as pickle
-#     joblib.dump(yang, "yang_pipeline.sav")
-#     with open("yang_pipeline.pkl", "wb") as yang_f:
-#         pickle.dump(yang, yang_f)
-    with open("yang_pipeline.pkl", "rb") as yang_f:
-        yang=pickle.load(yang_f)
-        
+#     test_X, test_y = zip(*docs_and_labels[:test_size]) #unzip the documents and labels
+#     train_X, train_y = zip(*docs_and_labels[test_size:])
+          
+          
+#     yang = YangHumourFeatureExtractor(w2v_loc,wilson_lexicon_loc)
+#     import timeit
+#     t=timeit.timeit("YangHumourFeatureExtractor(None,None,n_jobs=3,manager=manager).get_ambiguity_features_pool(train_X)", "from __main__ import YangHumourFeatureExtractor, train_X, manager",number=1)
+#     print("main + 3 threads + shared cache: {} seconds".format(t))
+#     t=timeit.timeit("YangHumourFeatureExtractor(None,None).get_ambiguity_features_single(train_X)", "from __main__ import YangHumourFeatureExtractor, train_X",number=1)
+#     print("main thread only + caching: {} seconds".format(t))
+#     print(timeit.timeit("YangHumourFeatureExtractor(None,None,n_jobs=1).get_ambiguity_features_pool(train_X)", "from __main__ import YangHumourFeatureExtractor, train_X",number=1))
+#     print(timeit.timeit("YangHumourFeatureExtractor(None,None).get_ambiguity_features_filtered(train_X,False)", "from __main__ import YangHumourFeatureExtractor, train_X",number=1))
+          
+#     print(timeit.timeit("run_yang_et_al_2015_baseline((train_X, train_y), (test_X, test_y), w2v_loc, wilson_lexicon_loc,n_jobs=4)", "from __main__ import run_yang_et_al_2015_baseline,train_X,train_y,test_X,test_y,w2v_loc,wilson_lexicon_loc",number=1))
+      
+    X,y = zip(*docs_and_labels)
+    print("starting training")
+    yang = train_yang_et_al_2015_pipeline(X, y, w2v_loc, wilson_lexicon_loc, n_estimators=100, min_samples_leaf=100, n_jobs=-1)
+    print("training complete\n\n")
+     
+# #     #save the model
+# #     yang.named_steps["extract_features"]._purge_w2v_model() #smaller pkl
+# #     from sklearn.externals import joblib
+# #     joblib.dump(yang, "yang_pipeline_ubuntu.pkl")
+#     import dill
+#     with open("yang_pipeline_ubuntu_100minsamples_class.dill", "wb") as yang_f:
+#         dill.dump(yang, yang_f)
+# #     with open("yang_pipeline_ubuntu_100minsamples.dill", "rb") as yang_f:
+# #         yang=dill.load(yang_f)
+#  
+# # #     from sklearn.preprocessing.data import StandardScaler
+# # # #     from sklearn.svm.classes import LinearSVC
+# # #     from sklearn.linear_model import LogisticRegression
+# # #     from sklearn.pipeline import Pipeline
+# # #     dumb_classifier = Pipeline([("count vector", CountVectorizer()),
+# # # #                                 ("scale", StandardScaler()),
+# # #                                 ("logistic regression", LogisticRegression())
+# # #                                 ])
+# # #     dumb_classifier.fit(X,y)
+# # #     print('fitted')
+# # #     with open("bow_lr.dill", "wb") as bow_f:
+# # #         dill.dump(dumb_classifier, bow_f)
+# #     with open("bow_lr.dill", "rb") as bow_f:
+# #         dumb_classifier = dill.load(bow_f)
         
         
     oneliners = []
-    with open(oneliners_loc, "r") as oneliners_f:
+    with open(oneliners_loc, "r", encoding="latin-1") as oneliners_f:
         for line in oneliners_f:
 #             words = nltk.word_tokenize(line.lower())
 #             words = [w for w in words if w.isalpha()]
               
-            oneliners.append(line)
+            oneliners.append(line.strip())
             if len(oneliners) >= 10:
                 break
     
@@ -587,14 +615,12 @@ if __name__ == "__main__":
 #         def parse(self, document):
 #             return self.parser.parse(" ".join(document))
 
-    from stat_parser import Parser
-#     from nltk.data import find
-#     from nltk.parse.bllip import BllipParser
-#     model_dir = find('models/bllip_wsj_no_aux').path
-#     bllip = BllipParser.from_unified_model_dir(model_dir)
+#     from stat_parser import Parser
+    from parser.bllip_wrapper import BllipParser
+    bllip = BllipParser()
 
     
-    anchor_extractor = YangHumourAnchorExtractor(Parser(), yang, 3)
+    anchor_extractor = YangHumourAnchorExtractor(bllip.parse, yang, 3)
 #     count = 0
     for oneliner in oneliners:
 #         if label==1:
