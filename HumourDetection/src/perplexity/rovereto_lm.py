@@ -3,13 +3,16 @@ Created on Jan 28, 2017
 
 @author: Andrew
 '''
+from __future__ import print_function, division
 import codecs
-from math import log
+from math import log10
 import os
 import glob
 import re
 from time import strftime
 from nltk.corpus import stopwords
+
+#TODO: use an NLTK FreqDist instead of python dict? Then pass that the KneserNeyProbDist? http://www.nltk.org/_modules/nltk/probability.html
 
 def convert_from_rovereto_format(fileloc,outputloc):
     with codecs.open(fileloc, "r", encoding="utf-8") as ngram_file, codecs.open(outputloc, "w", encoding="utf-8") as outfile:
@@ -22,11 +25,15 @@ def convert_from_rovereto_format(fileloc,outputloc):
             count = 0
             #https://web.archive.org/web/20160501211838/http://clic.cimec.unitn.it/amac/twitter_ngram/header-line.txt
             #for each day of the week, hour, and gender they list the frequency and the number of users who used it. We only care about frequencies
-            for i in xrange(1, len(line_split), 2):
+            for i in range(1, len(line_split), 2):
                 count += int(line_split[i])
             
             outfile.write(u"{}\t{}\n".format(ngram, count))
-    
+
+
+
+
+
 class RoveretoLM(object):
     def __init__(self, unigram_loc, bigram_loc=None):
         self.unigram_counts = self._read_file(unigram_loc)
@@ -54,7 +61,7 @@ class RoveretoLM(object):
             count +=1
             total += len(self.unigram_counts)
         
-        return log(count) - log(total)
+        return log10(count) - log10(total)
     
     def _bigram_log_prob(self, bigram, smoothing=True):
         b_count = self.bigram_counts.get(bigram,0)
@@ -63,7 +70,7 @@ class RoveretoLM(object):
             b_count+=1
             u_count+=len(self.bigram_counts)
         
-        return log(b_count) - log(u_count)
+        return log10(b_count) - log10(u_count)
     
     def get_unigram_log_prob(self,document, smoothing=True):
         log_prob = 0.0
@@ -77,7 +84,7 @@ class RoveretoLM(object):
         words = document.split()
         if len(words) > 0:
             log_prob=self._unigram_log_prob(words[0], smoothing)
-            for i in xrange(1,len(words)):
+            for i in range(1,len(words)):
                 bigram = u"{} {}".format(words[i-1],words[i])
                 log_prob += self._bigram_log_prob(bigram, smoothing)
         
@@ -119,7 +126,7 @@ if __name__ == "__main__":
             hashtag_words = [word for word in hashtag_words if word != "words"]
             
             
-            print "{}\tprocessing {}".format(strftime("%y-%m-%d_%H:%M:%S"),name)
+            print("{}\tprocessing {}".format(strftime("%y-%m-%d_%H:%M:%S"),name))
             with codecs.open(f, "r", encoding="utf-8") as tweet_file, codecs.open("{}.perplexity".format(f), "w", encoding="utf-8") as out_file:
                 #get the perplexity for the hashtag words. Might be useful in finding setup later
                 hash_perplex = []
@@ -157,4 +164,4 @@ if __name__ == "__main__":
                     
                     out_file.write(u"{}\t{}\t{}\t{}\t{}\n".format(tweet_id, uni_perp, bi_perp, tweet_sanitized, u" ".join([str(perp) for perp in unigram_perp])))
                     
-            print "{}\tfinished {}".format(strftime("%y-%m-%d_%H:%M:%S"),name)
+            print("{}\tfinished {}".format(strftime("%y-%m-%d_%H:%M:%S"),name))
