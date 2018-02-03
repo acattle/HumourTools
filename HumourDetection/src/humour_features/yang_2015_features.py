@@ -107,7 +107,7 @@ class YangHumourFeatureExtractor(TransformerMixin):
     
     def __init__(self, w2v_loc, wilson_lexicon_loc, k=5, verbose=False):
         """
-            Configure Yang et al. (2105) feature extraction options including
+            Configure Yang et al. (2015) feature extraction options including
             Word2Vec model and Wilson et al. (2005) subjectivity lexicon
             locations.
             
