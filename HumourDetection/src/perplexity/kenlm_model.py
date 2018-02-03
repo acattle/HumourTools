@@ -20,19 +20,28 @@ class KenLMSubprocessWrapper():
         https://docs.microsoft.com/en-us/windows/wsl/install-win10
     """
     
-    def __init__(self, model_Loc, kenlm_query_loc):
+    def __init__(self, model_Loc, kenlm_query_loc, tmpdir=None):
         """
             Initialize a KenLMSubprocessWrapper
+            
+            Note that this class writes both the KenLM input AND output to disk
+            to ensure subprocess calls reliably terminate. If the documents
+            passed to KenLM are very large, and/or your OS's default temporary
+            directory is on an SSD, consider using the tmpdir parameter to
+            write temp files to a larger drive or an HDD.
             
             :param model_loc: the location of the model which will be queried (WSL format, i.e. '/mnt/c/...')
             :type model_loc: str
             :param kenlm_query_loc: location of the KenLM query binary (WSL format, i.e. '/mnt/c/...')
             :type kenlm_query_loc: str
+            :param tmpdir: the directory temporary files will be created in. If None, your OS's default temp directory will be used
+            :type tmpdir: str
         """
         self.model_loc = model_Loc
         self.kenlm_query_loc = kenlm_query_loc
+        self.tmpdir=tmpdir
 
-    def get_probabilities(self, documents, tmpdir=None):
+    def get_log_probabilities(self, documents):
         """
             Query multiple documents at the same time and extract their log
             probabilties. (Note that KenLM uses log base 10).
@@ -41,16 +50,8 @@ class KenLMSubprocessWrapper():
             disk for each call. Therefore, querying multiple documents in a
             single call is much more efficient.
             
-            Note that the contents of documents as well as the output of KenLM
-            Query will be written to temporary files on disk. If documents is
-            very large, and/or your OS's default temporary directory is on an
-            SSD, dir can be used to specify temp files to be written on a
-            larger, possible hard-disk drive.
-            
             :param documents: tokenized documents to query
             :type documents: Iterable[Iterable[str]]
-            :param tmpdir: the directory temporary files will be created in. If None, your OS's default temp directory will be used
-            :type tmpdir: str
             
             :returns: A list containing the log probabilities of each document
             :rtype: List[float]
@@ -66,7 +67,7 @@ class KenLMSubprocessWrapper():
         #but then we'd need to manually clean up the temporary files, removing the advantage of using tempfile in the first place.
         #By using TemporaryDirectory, any files we create in that tempory directory will be deleted along with it
         #BUT this means we need to make sure any files in the directory are closed before tempfile tries to delete it
-        with TemporaryDirectory(dir=tmpdir) as td:
+        with TemporaryDirectory(dir=self.tmpdir) as td:
             doc_loc = os.path.join(td, "documents")
             out_loc = os.path.join(td, "kenlm_query_output")
             
@@ -109,7 +110,7 @@ class KenLMSubprocessWrapper():
         
         return log_probs
     
-    def get_perplexity(self,documents, tmpdir=None):
+    def get_perplexity(self,documents):
         """
             Calculate the perplexity of multiple documents at the same time.
             
@@ -117,21 +118,13 @@ class KenLMSubprocessWrapper():
             LM is read from disk for each call, getting perplexities for
             multiple documents in a single call is much more efficient.
             
-            Note that the contents of documents as well as the output of KenLM
-            Query will be written to temporary files on disk. If documents is
-            very large, and/or your OS's default temporary directory is on an
-            SSD, dir can be used to specify temp files to be written on a
-            larger, possible hard-disk drive.
-            
             :param documents: tokenized documents to query
             :type documents: Iterable[Iterable[str]]
-            :param tmpdir: the directory temporary files will be created in. If None, your OS's default temp directory will be used
-            :type tmpdir: str
             
             :returns: A list containing the perplexities of each document
             :rtype: List[float]
         """
-        log_probs = self.get_probabilities(documents, tmpdir)
+        log_probs = self.get_log_probabilities(documents)
         
         perplexities = []
         for d, lp in zip(documents, log_probs):
@@ -142,12 +135,12 @@ class KenLMSubprocessWrapper():
         return perplexities
     
 if __name__ == "__main__":
-    k = KenLMSubprocessWrapper("/mnt/d/Downloads/brown/brown.bin", "/mnt/d/git/kenlm-stable/build/bin/query")
+    k = KenLMSubprocessWrapper("/mnt/d/Downloads/brown/brown.bin", "/mnt/d/git/kenlm-stable/build/bin/query", "d:/temp")
     
     d=["this is a test .".split(),
        "so is this !".split()]
     
-    print(k.get_perplexity(d, r"D:\temp"))
+    print(k.get_perplexity(d))
 #     km = KenLMModel("/mnt/c/Users/Andrew/Desktop/kenlm models and raw text/wiki_pos_w_punc_4gram_prune.arpa")
 #     km = KenLMModel("/mnt/c/Users/Andrew/Desktop/Senti140/tokens_2.arpa")
 #     
