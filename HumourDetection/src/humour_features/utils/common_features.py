@@ -40,6 +40,7 @@ def get_interword_score_features(documents, scorer, token_filter=None):
     for document in documents:
         scores = []
         document = token_filter(document) #get only the words of interest
+        #TODO: would it be more efficient to do all documents at once?
         for word1, word2 in combinations(document, 2): #for all interesting word pairs
             #TODO: ignore OOVs? How? Failing silently on keyerrors?
             score= scorer(word1, word2)
