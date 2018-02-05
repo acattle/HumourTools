@@ -125,6 +125,7 @@ class AssociationFeatureExtractor(TransformerMixin):
             :param verbose: whether verbose mode should be used or not
             :type verbose: bool
             :param low_memory: specifies whether models should be purged from memory after use. This reduces memory usage but increases disk I/O as models will need to be automatically read back from disk before next use
+            :type low_memory: bool
         """
         self.logger = logging.getLogger(__name__)
         if verbose:
@@ -224,11 +225,7 @@ class AssociationFeatureExtractor(TransformerMixin):
         return dimensions
     
     def _get_synsets(self,word):
-        return wn.synsets(re.sub(" ", "_",word))
-    
-    def _get_synset_names(self,word):
-        return [synset.name() for synset in self._get_synsets(word)]
-    
+        return wn.synsets(self._space_to_underscore(word))
     def _space_to_underscore(self, word):
         return re.sub(" ", "_",word)
     def _underscore_to_space(self, word):
@@ -238,6 +235,15 @@ class AssociationFeatureExtractor(TransformerMixin):
         return self
     
     def get_lda_feats(self,stimuli_response):
+        """
+            Get LDA similarity.
+            
+            :param stimuli_response: list of tuples representing the stimuli and response words
+            :type stimuli_response: Iterable[Tuple[str, str]]
+            
+            :returns: A matrix representing the calculated LDA similarities
+            :rtype: numpy.array
+        """
         feature_vects = []
         if FEAT_LDA_SIM in self.features:
             #Only load LDA model if we care about LDA features
@@ -257,6 +263,16 @@ class AssociationFeatureExtractor(TransformerMixin):
         return np.vstack(feature_vects)
     
     def get_w2v_feats(self,stimuli_response):
+        """
+            Get Word2Vec-based features. These include similarity, vector offsets,
+            and/or full vectors.
+            
+            :param stimuli_response: list of tuples representing the stimuli and response words
+            :type stimuli_response: Iterable[Tuple[str, str]]
+            
+            :returns: A matrix representing the extracted Word2Vec features
+            :rtype: numpy.array
+        """
         feature_vects=[]
         full_vects_needed = (FEAT_W2V_OFFSET in self.features) or (FEAT_W2V_VECTORS in self.features)
         if (FEAT_W2V_SIM in self.features) or full_vects_needed:
@@ -290,6 +306,16 @@ class AssociationFeatureExtractor(TransformerMixin):
         return np.vstack(feature_vects)
     
     def get_glove_feats(self,stimuli_response):
+        """
+            Get GloVe-based features. These include similarity, vector offsets,
+            and/or full vectors.
+            
+            :param stimuli_response: list of tuples representing the stimuli and response words
+            :type stimuli_response: Iterable[Tuple[str, str]]
+            
+            :returns: A matrix representing the extracted GloVe features
+            :rtype: numpy.array
+        """
         feature_vects=[]
         full_vects_needed = (FEAT_GLOVE_OFFSET in self.features) or (FEAT_GLOVE_VECTORS in self.features)
         if (FEAT_GLOVE_SIM in self.features) or full_vects_needed:
@@ -322,22 +348,30 @@ class AssociationFeatureExtractor(TransformerMixin):
         
         return np.vstack(feature_vects)
     
-    def get_autoex_feats(self,stimuli_response):
+    def get_autoex_feats(self,stimuli_response_synsets):
+        """
+            Extract AutoExtend similarity features
+            
+            :param stimuli_response_synsets: the synsets which each stimuli and response belong to
+            :type stimuli_response_synsets: Iterable[Tuple[Iterable[Synset], Iterable[Synset]]]
+            
+            :returns: A matrix representing the extracted AutoExtend features
+            :rtype: numpy.array
+        """
         feature_vects=[]
         if (FEAT_MAX_AUTOEX_SIM in self.features) or (FEAT_AVG_AUTOEX_SIM in self.features):
             #Only load AutoExtend model if we care about AutoExtend features
             
-            total = len(stimuli_response)
+            total = len(stimuli_response_synsets)
             processed = 0
-            for stimuli, response in stimuli_response:
+            for stimuli_synsets, response_synsets in stimuli_response_synsets:
                 feature_vect = []
-                stimuli_synsets = self._get_synset_names(self._space_to_underscore(stimuli))
-                response_synsets = self._get_synset_names(self._space_to_underscore(response))
                 
                 synset_sims = []
                 for stimuli_synset in stimuli_synsets:
                     for response_synset in response_synsets:
-                        synset_sims.append(self.autoex_model.get_similarity(stimuli_synset, response_synset))
+                        #TODO: get the names in advance?
+                        synset_sims.append(self.autoex_model.get_similarity(stimuli_synset.name(), response_synset.name()))
                 
                 if not synset_sims:
                     #if no valid readings exist (likely because one of the words has 0 synsets), default to 0
@@ -358,32 +392,39 @@ class AssociationFeatureExtractor(TransformerMixin):
                 self.autoex_model._purge_model()
                         
         else:
-            feature_vects = [[]] * len(stimuli_response) #default to empty feature set
+            feature_vects = [[]] * len(stimuli_response_synsets) #default to empty feature set
         
         return np.vstack(feature_vects)
     
-    def get_wn_betweenness(self,stimuli_response):
+    def get_wn_betweenness(self,stimuli_response_synsets):
+        """
+            Extract WordNet betweenness centrality features.
+            
+            :param stimuli_response_synsets: the synsets which each stimuli and response belong to
+            :type stimuli_response_synsets: Iterable[Tuple[Iterable[Synset], Iterable[Synset]]]
+            
+            :returns: A matrix representing the extracted WordNet betweenness centralities
+            :rtype: numpy.array
+        """
         feature_vects = []
         if FEAT_MAX_BETWEENNESS in self.features or FEAT_AVG_BETWEENNESS in self.features or FEAT_TOTAL_BETWEENNESS in self.features:
             #Only load betweenness if we care about betweenness features
             with open(self.betweenness_loc, "rb") as betweeneness_pkl:
                 betweenness = pickle.load(betweeneness_pkl)
             
-            for stimuli, response in stimuli_response:
+            for stimuli_synsets, response_synsets in stimuli_response_synsets:
                 feature_vect = []
                 
-                stimuli_synsets = self._get_synset_names(self._space_to_underscore(stimuli))
                 stimuli_betweennesses = []
                 for stimuli_synset in stimuli_synsets:
-                    stimuli_betweennesses.append(betweenness.get(stimuli_synset,0.0))
+                    stimuli_betweennesses.append(betweenness.get(stimuli_synset.name(),0.0))
                 if not stimuli_synsets:
                     #if stimuli has 0 synsets, insert a dumbie value to avoid errors
                     stimuli_betweennesses.append(0.0)
                 
-                response_synsets = self._get_synset_names(self._space_to_underscore(response))
                 response_betweennesses = []
                 for response_synset in response_synsets:
-                    response_betweennesses.append(betweenness.get(response_synset,0.0))
+                    response_betweennesses.append(betweenness.get(response_synset.name(),0.0))
                 if not response_synsets:
                     #if respose has 0 synsets, insert a dumbie value to avoid errors
                     response_betweennesses.append(0.0)
@@ -401,32 +442,39 @@ class AssociationFeatureExtractor(TransformerMixin):
                 feature_vects.append(feature_vect)
             
         else:
-            feature_vects = [[]] * len(stimuli_response) #default to empty feature set
+            feature_vects = [[]] * len(stimuli_response_synsets) #default to empty feature set
         
         return np.vstack(feature_vects)
     
-    def get_wn_load(self,stimuli_response):
+    def get_wn_load(self,stimuli_response_synsets):
+        """
+            Extract WordNet load centrality features.
+            
+            :param stimuli_response_synsets: the synsets which each stimuli and response belong to
+            :type stimuli_response_synsets: Iterable[Tuple[Iterable[Synset], Iterable[Synset]]]
+            
+            :returns: A matrix representing the extracted WordNet load centralities
+            :rtype: numpy.array
+        """
         feature_vects = []
         if FEAT_MAX_LOAD in self.features or FEAT_AVG_LOAD in self.features or FEAT_TOTAL_LOAD in self.features:
                 #Only load load if we care about load features and we have a location
                 with open(self.load_loc, "rb") as load_pkl:
                     load = pickle.load(load_pkl)
                 
-                for stimuli, response in stimuli_response:
+                for stimuli_synsets, response_synsets in stimuli_response_synsets:
                     feature_vect = []
                     
-                    stimuli_synsets = self._get_synset_names(self._space_to_underscore(stimuli))
                     stimuli_loads = []
                     for stimuli_synset in stimuli_synsets:
-                        stimuli_loads.append(load.get(stimuli_synset,0.0))
+                        stimuli_loads.append(load.get(stimuli_synset.name(),0.0))
                     if not stimuli_synsets:
                         #if stimuli has 0 synsets, insert a dumbie value to avoid errors
                         stimuli_loads.append(0.0)
                     
-                    response_synsets = self._get_synset_names(self._space_to_underscore(response))
                     response_loads = []
                     for response_synset in response_synsets:
-                        response_loads.append(load.get(response_synset,0.0))
+                        response_loads.append(load.get(response_synset.name(),0.0))
                     if not response_synsets:
                         #if respose has 0 synsets, insert a dumbie value to avoid errors
                         response_loads.append(0.0)
@@ -444,34 +492,52 @@ class AssociationFeatureExtractor(TransformerMixin):
                     feature_vects.append(feature_vect)
                     
         else:
-            feature_vects = [[]] * len(stimuli_response) #default to empty feature set
+            feature_vects = [[]] * len(stimuli_response_synsets) #default to empty feature set
         
         return np.vstack(feature_vects)
     
-    def get_dir_rel(self,stimuli_response):
+    def get_dir_rel(self,stimuli_response_synsets):
+        """ 
+            Extract WordNet directional relativity (Hayashi, 2016) features.
+            
+                Hayashi, Y. (2016). Predicting the Evocation Relation between
+                Lexicalized Concepts. In Proceedings of COLING 2016, the 26th
+                International Conference on Computational Linguistics: Technical
+                Papers (pp. 1657-1668).
+            
+            :param stimuli_response_synsets: the synsets which each stimuli and response belong to
+            :type stimuli_response_synsets: Iterable[Tuple[Iterable[Synset], Iterable[Synset]]]
+            
+            :returns: A matrix representing the extracted WordNet betweenness centralities
+            :rtype: numpy.array
+        """
         feature_vects = []
         if FEAT_DIR_REL in self.features:
             wn_graph = WordNetGraph()
             
-            total = len(stimuli_response)
-            processed = 0
-            for stimuli, response in stimuli_response:
-                stimuli_synsets = self._get_synset_names(stimuli)
-                response_synsets = self._get_synset_names(response)
+            for stimuli_synsets, response_synsets in stimuli_response_synsets:
+                stimuli_names = [s.name() for s in stimuli_synsets]
+                response_names = [s.name() for s in response_synsets]
                 
-                dirrel = wn_graph.get_directional_relativity(stimuli_synsets,response_synsets)
+                dirrel = wn_graph.get_directional_relativity(stimuli_names,response_names)
                 feature_vects.append(dirrel)
-                
-                processed += 1
-                if not (processed % self.verbose_interval):
-                    self.logger.debug("{}/{} done".format(processed, total))
         
         else:
-            feature_vects = [[]] * len(stimuli_response) #default to empty feature set
+            feature_vects = [[]] * len(stimuli_response_synsets) #default to empty feature set
         
         return np.vstack(feature_vects)
     
     def get_w2g_feats(self,stimuli_response):
+        """
+            Get Word2Gauss-based features. These include similarity, energy,
+            vector offsets, and/or full vectors.
+            
+            :param stimuli_response: list of tuples representing the stimuli and response words
+            :type stimuli_response: Iterable[Tuple[str, str]]
+            
+            :returns: A matrix representing the extracted Word2Gauss features
+            :rtype: numpy.array
+        """
         feature_vects=[]
         if (FEAT_W2G_SIM in self.features) or (FEAT_W2G_ENERGY in self.features) or (FEAT_W2G_OFFSET in self.features) or (FEAT_W2G_VECTORS in self.features):
             #Only load Word2Gauss if we care about Word2Gauss features
@@ -504,7 +570,18 @@ class AssociationFeatureExtractor(TransformerMixin):
         
         return np.vstack(feature_vects)
     
-    def get_wn_feats(self,stimuli_response):
+    def get_wn_feats(self,stimuli_response_synsets):
+        """
+            Extract WordNet-based features according to the instance's feature
+            list. This includes path, Wu-Palmer, and Leacock-Chandra
+            similarities as well as lexvector.
+            
+            :param stimuli_response_synsets: the synsets which each stimuli and response belong to
+            :type stimuli_response_synsets: Iterable[Tuple[Iterable[Synset], Iterable[Synset]]]
+            
+            :returns: A matrix representing the extracted WordNet features
+            :rtype: numpy.array
+        """
         feature_vects=[]
         
         #determine which features we need to extract
@@ -516,13 +593,10 @@ class AssociationFeatureExtractor(TransformerMixin):
         if wup_needed or path_needed or lch_needed or lexvector_needed:
             wnu = WordNetUtils(cache=True)
             
-            total = len(stimuli_response)
+            total = len(stimuli_response_synsets)
             processed = 0
-            for stimuli, response in stimuli_response:
+            for stimuli_synsets, response_synsets in stimuli_response_synsets:
                 feature_vect = []
-                
-                stimuli_synsets = self._get_synsets(stimuli)
-                response_synsets = self._get_synsets(response)
                 
                 if lexvector_needed:
                     feature_vect.append(wnu.get_lex_vector(stimuli_synsets))
@@ -568,21 +642,33 @@ class AssociationFeatureExtractor(TransformerMixin):
                     self.logger.debug("{}/{} done".format(processed, total))
         
         else:
-            feature_vects = [[]] * len(stimuli_response) #default to empty feature set
+            feature_vects = [[]] * len(stimuli_response_synsets) #default to empty feature set
         
         return np.vstack(feature_vects)
     
-    def get_extended_lesk_feats(self, stimuli_response):
+    def get_extended_lesk_feats(self, stimuli_response_synsets):
+        """
+            Extract Extended Lesk relatedness. This feature is only extracted if
+            FEAT_LESK exists in the feature list specified during __init__().
+            Calculates Extended Lesk according to the relations DAT file
+            specfied during __init__().
+            
+            :param stimuli_response_synsets: the synsets which each stimuli and response belong to
+            :type stimuli_response_synsets: Iterable[Tuple[Iterable[Synset], Iterable[Synset]]]
+            
+            :returns: A matrix representing the extracted Extended Lesk relatedness
+            :rtype: numpy.array
+        """
         feature_vects = []
         
         if FEAT_LESK in self.features:
             el = ExtendedLesk(self.lesk_relations, cache=True) #doesn't matter if we cache since it'll be garbage collected when we're done
             
-            total = len(stimuli_response)
+            total = len(stimuli_response_synsets)
             processed = 0
-            for stimuli, response in stimuli_response:
+            for stimuli_synsets, response_synsets in stimuli_response_synsets:
                 #don't need to sanitize stimuli and response since I'm looking them up in wordnet anyway
-                extended_lesk = el.getWordRelatedness(stimuli, response)
+                extended_lesk = el.getSynsetRelatedness(stimuli_synsets, response_synsets)
                 
                 feature_vects.append(extended_lesk)
                 
@@ -591,7 +677,7 @@ class AssociationFeatureExtractor(TransformerMixin):
                     self.logger.debug("{}/{} done".format(processed, total))
         
         else:
-            feature_vects = [[]] * len(stimuli_response)
+            feature_vects = [[]] * len(stimuli_response_synsets)
         
         return np.vstack(feature_vects)
     
@@ -605,24 +691,14 @@ class AssociationFeatureExtractor(TransformerMixin):
             :returns: A numpy array representing the extracted features
             :rtype: numpy.array
         """
-        stimuli_response = [(stimuli.lower(), response.lower()) for stimuli, response in stimuli_response]
+        
         feature_vects = []
+        
+        stimuli_response = [(stimuli.lower(), response.lower()) for stimuli, response in stimuli_response]
         
         self.logger.debug("starting lda")
         feature_vects.append(self.get_lda_feats(stimuli_response))
         self.logger.debug("lda done")
-          
-        self.logger.debug("starting autoex")
-        feature_vects.append(self.get_autoex_feats(stimuli_response))
-        self.logger.debug("autoex done")
-          
-        self.logger.debug("starting betweenness")
-        feature_vects.append(self.get_wn_betweenness(stimuli_response))
-        self.logger.debug("betweenness done")
-         
-        self.logger.debug("starting load")
-        feature_vects.append(self.get_wn_load(stimuli_response))
-        self.logger.debug("load done")
          
         self.logger.debug("starting w2v")
         feature_vects.append(self.get_w2v_feats(stimuli_response))
@@ -635,17 +711,37 @@ class AssociationFeatureExtractor(TransformerMixin):
         self.logger.debug("starting w2g")
         feature_vects.append(self.get_w2g_feats(stimuli_response))
         self.logger.debug("w2g done")
+        
+
+        
+        #prefetch all the synsets. Should speed things up
+        #TODO: use a Dict? to reduce the number of wordnet.synsets calls further?
+        stimuli_response_synsets = [(self._get_synsets(stimuli), self._get_synsets(response)) for stimuli, response in stimuli_response]
+          
+        self.logger.debug("starting autoex")
+        feature_vects.append(self.get_autoex_feats(stimuli_response_synsets))
+        self.logger.debug("autoex done")
+          
+        self.logger.debug("starting betweenness")
+        feature_vects.append(self.get_wn_betweenness(stimuli_response_synsets))
+        self.logger.debug("betweenness done")
+         
+        self.logger.debug("starting load")
+        feature_vects.append(self.get_wn_load(stimuli_response_synsets))
+        self.logger.debug("load done")
        
         self.logger.debug("starting dirrels")
-        feature_vects.append(self.get_dir_rel(stimuli_response))
+        feature_vects.append(self.get_dir_rel(stimuli_response_synsets))
         self.logger.debug("dirrels done")
        
         self.logger.debug("starting wordnet feats")
-        feature_vects.append(self.get_wn_feats(stimuli_response))
+        feature_vects.append(self.get_wn_feats(stimuli_response_synsets))
         self.logger.debug("wordnet feats done")
          
         self.logger.debug("starting extended lesk")
-        feature_vects.append(self.get_extended_lesk_feats(stimuli_response))
+        feature_vects.append(self.get_extended_lesk_feats(stimuli_response_synsets))
         self.logger.debug("extended lesk done")
+        
+        
         
         return np.hstack(feature_vects)
