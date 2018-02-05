@@ -13,6 +13,7 @@ from util.misc import mean
 import numpy as np
 import pickle
 import re
+from util.loggers import LoggerMixin
 import logging
 
 #TODO: Add selective feature scaling (i.e. scale everything but vectors. Or should be scale vectors too?)
@@ -101,25 +102,27 @@ ALL_FEATS = [FEAT_W2V_SIM,
              FEAT_LESK
              ]
 
-class AssociationFeatureExtractor(TransformerMixin):
-    def __init__(self, features=DEFAULT_FEATS, lda_model=None, w2v_model=None, autoex_model=None, betweenness_loc=None, load_loc=None,  glove_model=None, w2g_model=None, lesk_relations=None, verbose=False, low_memory=True):
+class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
+    def __init__(self, features=DEFAULT_FEATS, lda_model_getter=None, w2v_model_getter=None, autoex_model_getter=None, betweenness_loc=None, load_loc=None,  glove_model_getter=None, w2g_model_getter=None, lesk_relations=None, verbose=False, low_memory=True):
         """
             Initialize a Word Association Strength feature extractor
             
-            :param lda_model: LDA model to use for feature extraction
-            :type lda_model: util.gensim_wrappers.gensim_topicsum_models.GensimTopicSumModel
-            :param w2v_model: Word2Vec model to use for feature extraction
-            :type w2v_model: util.gensim_wrappers.gensim_vector_models.GensimVectorModel
-            :param autoex_model: AutoExtend model to use for feature extraction
-            :type autoex_model: util.gensim_wrappers.gensim_vector_models.GensimVectorModel
+            :param features: list of association features to extract
+            :type features: Iterable[str]
+            :param lda_model_getter: function for retrieving LDA model to use for feature extraction
+            :type lda_model_getter: Callable[[], GensimTopicSumModel]
+            :param w2v_model_getter: function for retrieving Word2Vec model to use for feature extraction
+            :type w2v_model_getter: Callable[[], GensimVectorModel]
+            :param autoex_model_getter: function for retrieving AutoExtend model to use for feature extraction
+            :type autoex_model_getter: Callable[[], GensimVectorModel]
             :param betweenness_loc: location of betweenness centrality pkl
             :type betweenness_loc: str
             :param load_loc: location of load centrality pkl
             :type load_loc: str
-            :param glove_model: GloVe model to use for feature extraction
-            :type glove_model: util.gensim_wrappers.gensim_vector_models.GensimVectorModel
-            :param w2g_model: Word2Gauss model to use for feature extraction
-            :type w2g_model: util.word2gauss_wrapper.Word2GaussModel
+            :param glove_model_getter: function for retrieving GloVe model to use for feature extraction
+            :type glove_model_getter: Callable[[], GensimVectorModel]
+            :param w2g_model_getter: function for retrieving Word2Gauss model to use for feature extraction
+            :type w2g_model_getter: Callable[[], Word2GaussModel]
             :param lesk_relations: Location of relations.dat for use with ExtendedLesk
             :type lesk_relations: str
             :param verbose: whether verbose mode should be used or not
@@ -127,18 +130,17 @@ class AssociationFeatureExtractor(TransformerMixin):
             :param low_memory: specifies whether models should be purged from memory after use. This reduces memory usage but increases disk I/O as models will need to be automatically read back from disk before next use
             :type low_memory: bool
         """
-        self.logger = logging.getLogger(__name__)
         if verbose:
             self.logger.setLevel(logging.DEBUG)
         self.verbose_interval = 1000
         
-        self.lda_model = lda_model
-        self.w2v_model = w2v_model
-        self.autoex_model = autoex_model
+        self._get_lda_model = lda_model_getter
+        self._get_w2v_model = w2v_model_getter
+        self._get_autoex_model = autoex_model_getter
         self.betweenness_loc = betweenness_loc
         self.load_loc = load_loc
-        self.glove_model = glove_model
-        self.w2g_model = w2g_model
+        self._get_glove_model = glove_model_getter
+        self._get_w2g_model = w2g_model_getter
         self.lesk_relations = lesk_relations
         self.features = self._validate_features(features)
         
@@ -164,15 +166,15 @@ class AssociationFeatureExtractor(TransformerMixin):
             
             #Ensure features have the required models
             #TODO: Should I use a custom exceptions?
-            elif feat == FEAT_LDA_SIM and not self.lda_model:
+            elif feat == FEAT_LDA_SIM and not self._get_lda_model:
                 raise Exception(f"'{feat}' feature is specified but no LDA model was provided")
-            elif feat in (FEAT_W2V_SIM, FEAT_W2V_OFFSET, FEAT_W2V_VECTORS) and not self.w2v_model:
+            elif feat in (FEAT_W2V_SIM, FEAT_W2V_OFFSET, FEAT_W2V_VECTORS) and not self._get_w2v_model:
                 raise Exception(f"'{feat}' feature is specified but no Word2Vec model was provided")
-            elif feat in (FEAT_MAX_AUTOEX_SIM, FEAT_AVG_AUTOEX_SIM) and not self.autoex_model:
+            elif feat in (FEAT_MAX_AUTOEX_SIM, FEAT_AVG_AUTOEX_SIM) and not self._get_autoex_model:
                 raise Exception(f"'{feat}' feature is specified but no AutoEx model was provided")
-            elif feat in (FEAT_GLOVE_SIM, FEAT_GLOVE_OFFSET, FEAT_GLOVE_VECTORS) and not self.glove_model:
+            elif feat in (FEAT_GLOVE_SIM, FEAT_GLOVE_OFFSET, FEAT_GLOVE_VECTORS) and not self._get_glove_model:
                 raise Exception(f"'{feat}' feature is specified but no GloVe model was provided")
-            elif feat in (FEAT_W2G_SIM, FEAT_W2G_OFFSET, FEAT_W2G_VECTORS) and not self.w2g_model:
+            elif feat in (FEAT_W2G_SIM, FEAT_W2G_OFFSET, FEAT_W2G_VECTORS) and not self._get_w2g_model:
                 raise Exception(f"'{feat}' feature is specified but no Word2Gauss model was provided")
             elif feat in (FEAT_MAX_LOAD, FEAT_AVG_LOAD, FEAT_TOTAL_LOAD) and not self.load_loc:
                 raise Exception(f"'{feat}' feature is specified but no load centrality pkl location was provided")
@@ -204,17 +206,17 @@ class AssociationFeatureExtractor(TransformerMixin):
         dimensions = 0
         for feature in self.features:
             if feature == FEAT_GLOVE_OFFSET:
-                dimensions += self.glove_model.get_dimensions()
+                dimensions += self._get_glove_model().get_dimensions()
             elif feature == FEAT_W2V_OFFSET:
-                dimensions += self.w2v_model.get_dimensions()
+                dimensions += self._get_w2v_model().get_dimensions()
             elif feature == FEAT_W2G_OFFSET:
-                dimensions += self.w2g_model.get_dimensions()
+                dimensions += self._get_w2g_model().get_dimensions()
             elif feature == FEAT_GLOVE_VECTORS:
-                dimensions += self.glove_model.get_dimensions() * 2
+                dimensions += self._get_glove_model().get_dimensions() * 2
             elif feature == FEAT_W2V_VECTORS:
-                dimensions += self.w2v_model.get_dimensions() * 2
+                dimensions += self._get_w2v_model().get_dimensions() * 2
             elif feature == FEAT_W2G_VECTORS:
-                dimensions += self.w2g_model.get_dimensions() * 2
+                dimensions += self._get_w2g_model().get_dimensions() * 2
             elif feature == FEAT_LEXVECTORS:
                 dimensions += 100
             elif feature in feats_2d:
@@ -249,13 +251,13 @@ class AssociationFeatureExtractor(TransformerMixin):
             #Only load LDA model if we care about LDA features
             
             for stimuli, response in stimuli_response:
-                lda_sim = self.lda_model.get_similarity(stimuli, response)
+                lda_sim = self._get_lda_model().get_similarity(stimuli, response)
                 lda_sim = 0.0 if np.isnan(lda_sim) else lda_sim
                 
                 feature_vects.append(lda_sim)
                 
             if self.low_memory:
-                self.lda_model._purge_model()
+                self._get_lda_model()._purge_model()
         
         else:
             feature_vects = [[]] * len(stimuli_response) #default to empty feature set
@@ -284,11 +286,11 @@ class AssociationFeatureExtractor(TransformerMixin):
                 santized_response = self._space_to_underscore(response)
                 
                 if FEAT_W2V_SIM in self.features:
-                    feature_vect.append(self.w2v_model.get_similarity(santized_stimuli, santized_response))
+                    feature_vect.append(self._get_w2v_model().get_similarity(santized_stimuli, santized_response))
                 
                 if full_vects_needed:
-                    stim_vector = self.w2v_model.get_vector(santized_stimuli)
-                    resp_vector = self.w2v_model.get_vector(santized_response)
+                    stim_vector = self._get_w2v_model().get_vector(santized_stimuli)
+                    resp_vector = self._get_w2v_model().get_vector(santized_response)
                     if FEAT_W2V_OFFSET in self.features:
                         feature_vect.append(stim_vector - resp_vector)
                     if FEAT_W2V_VECTORS in self.features:
@@ -298,7 +300,7 @@ class AssociationFeatureExtractor(TransformerMixin):
                 feature_vects.append(np.hstack(feature_vect))
                 
             if self.low_memory:
-                self.w2v_model._purge_model()
+                self._get_w2v_model()._purge_model()
                 
         else:
             feature_vects = [[]] * len(stimuli_response) #default to empty feature set
@@ -327,11 +329,11 @@ class AssociationFeatureExtractor(TransformerMixin):
                 santized_response = self._space_to_underscore(response)
                 
                 if FEAT_GLOVE_SIM in self.features:
-                    feature_vect.append(self.glove_model.get_similarity(santized_stimuli, santized_response))
+                    feature_vect.append(self._get_glove_model().get_similarity(santized_stimuli, santized_response))
                 
                 if full_vects_needed:
-                    stim_vector = self.glove_model.get_vector(santized_stimuli)
-                    resp_vector = self.glove_model.get_vector(santized_response)
+                    stim_vector = self._get_glove_model().get_vector(santized_stimuli)
+                    resp_vector = self._get_glove_model().get_vector(santized_response)
                     if FEAT_GLOVE_OFFSET in self.features:
                         feature_vect.append(stim_vector - resp_vector)
                     if FEAT_GLOVE_VECTORS in self.features:
@@ -341,7 +343,7 @@ class AssociationFeatureExtractor(TransformerMixin):
                 feature_vects.append(np.hstack(feature_vect))
                 
             if self.low_memory:
-                self.glove_model._purge_model()
+                self._get_glove_model()._purge_model()
                   
         else:
             feature_vects = [[]] * len(stimuli_response) #default to empty feature set
@@ -371,7 +373,7 @@ class AssociationFeatureExtractor(TransformerMixin):
                 for stimuli_synset in stimuli_synsets:
                     for response_synset in response_synsets:
                         #TODO: get the names in advance?
-                        synset_sims.append(self.autoex_model.get_similarity(stimuli_synset.name(), response_synset.name()))
+                        synset_sims.append(self._get_autoex_model().get_similarity(stimuli_synset.name(), response_synset.name()))
                 
                 if not synset_sims:
                     #if no valid readings exist (likely because one of the words has 0 synsets), default to 0
@@ -389,7 +391,7 @@ class AssociationFeatureExtractor(TransformerMixin):
                     self.logger.debug("{}/{} done".format(processed, total))
                 
             if self.low_memory:
-                self.autoex_model._purge_model()
+                self._get_autoex_model()._purge_model()
                         
         else:
             feature_vects = [[]] * len(stimuli_response_synsets) #default to empty feature set
@@ -550,20 +552,20 @@ class AssociationFeatureExtractor(TransformerMixin):
                 response_as_doc = self._underscore_to_space(response)
                 
                 if FEAT_W2G_SIM in self.features:
-                    feature_vect.append(self.w2g_model.get_similarity(stimuli_as_doc, response_as_doc))
+                    feature_vect.append(self._get_w2g_model().get_similarity(stimuli_as_doc, response_as_doc))
                 if FEAT_W2G_OFFSET in self.features:
-                    feature_vect.append(self.w2g_model.get_offset(stimuli_as_doc, response_as_doc))
+                    feature_vect.append(self._get_w2g_model().get_offset(stimuli_as_doc, response_as_doc))
                 if FEAT_W2G_VECTORS in self.features:
-                    feature_vect.append(self.w2g_model.get_vector(stimuli_as_doc))
-                    feature_vect.append(self.w2g_model.get_vector(response_as_doc))
+                    feature_vect.append(self._get_w2g_model().get_vector(stimuli_as_doc))
+                    feature_vect.append(self._get_w2g_model().get_vector(response_as_doc))
                 if FEAT_W2G_ENERGY in self.features:
                     #assume stimuli/response are a valid ngrams
-                    feature_vect.append(self.w2g_model.get_energy(self._space_to_underscore(stimuli), self._space_to_underscore(response)))
+                    feature_vect.append(self._get_w2g_model().get_energy(self._space_to_underscore(stimuli), self._space_to_underscore(response)))
                 
                 feature_vects.append(np.hstack(feature_vect))
                 
             if self.low_memory:
-                self.w2g_model._purge_model()
+                self._get_w2g_model()._purge_model()
          
         else:
             feature_vects = [[]] * len(stimuli_response) #default to empty feature set

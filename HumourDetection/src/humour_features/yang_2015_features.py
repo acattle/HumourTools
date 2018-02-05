@@ -22,6 +22,7 @@ from sklearn.neighbors import NearestNeighbors
 from humour_features.utils.common_features import get_alliteration_and_rhyme_features,\
     get_interword_score_features
 import logging
+from util.loggers import LoggerMixin
 
 def _convert_pos_to_wordnet(treebank_tag):
     if treebank_tag.startswith('J'):
@@ -97,7 +98,7 @@ def run_yang_et_al_2015_baseline(train, test, w2v_model, wilson_lexicon_loc):
     print("Recall: {}".format(r))
     print("F-Score: {}".format(f))
 
-class YangHumourFeatureExtractor(TransformerMixin):
+class YangHumourFeatureExtractor(TransformerMixin, LoggerMixin):
     """
         A class for implementing the features used in Yang et al. (2015) as a
         scikit-learn transformer, suitable for use in scikit-learn pipelines.
@@ -130,7 +131,6 @@ class YangHumourFeatureExtractor(TransformerMixin):
         self.train_y = None #will be used for KNN features
         self.knn_vectorizer = None #will be used to transform documents into input for self.knn_model
         
-        self.logger = logging.getLogger(__name__)
         if verbose:
             self.logger.setLevel(logging.DEBUG)
 

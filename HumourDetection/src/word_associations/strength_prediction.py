@@ -1,23 +1,17 @@
 '''
 Created on Jan 9, 2017
 
-@author: Andrew
+@author: Andrew Cattle <acattle@cse.ust.hk>
 '''
-import argparse
 from time import strftime
 from scipy.stats.stats import spearmanr, pearsonr
 from keras.models import Sequential
 from keras.layers import Dense, Dropout
 from os.path import join
 from keras.wrappers.scikit_learn import KerasRegressor
-from word_associations.association_feature_extractor import AssociationFeatureExtractor, DEFAULT_FEATS,\
-    FEAT_W2G_SIM
+from word_associations.association_feature_extractor import AssociationFeatureExtractor, DEFAULT_FEATS
 from sklearn.pipeline import Pipeline
-import pickle
-from util.keras_pipeline_persistance import save_keras_pipeline,\
-    load_keras_pipeline
-from util.common_models import get_wikipedia_lda, get_google_word2vec,\
-    get_stanford_glove, get_wikipedia_word2gauss, get_google_autoextend
+
 
 def _create_mlp(num_units=None, input_dim=None):
     if num_units == None:
@@ -33,7 +27,7 @@ def _create_mlp(num_units=None, input_dim=None):
     model.compile(loss="mse", optimizer="adam")
     return model
 
-def train_cattle_ma_2017_association_pipeline(X, y, num_units = None, epochs=50, batchsize=5000, features=DEFAULT_FEATS, lda_model=None, w2v_model=None, autoex_model=None, betweenness_loc=None, load_loc=None,  glove_model=None, w2g_model=None, lesk_relations=None, verbose=False, low_memory=True):
+def train_cattle_ma_2017_association_pipeline(X, y, num_units = None, epochs=50, batchsize=5000, features=DEFAULT_FEATS, lda_model_getter=None, w2v_model_getter=None, autoex_model_getter=None, betweenness_loc=None, load_loc=None,  glove_model_getter=None, w2g_model_getter=None, lesk_relations=None, verbose=False, low_memory=True):
 
     """
         Create an association prediction pipeline including feature extraction
@@ -56,35 +50,35 @@ def train_cattle_ma_2017_association_pipeline(X, y, num_units = None, epochs=50,
         :type batchsize: int
         :param features: list of association features to extract
         :type features: Iterable[str]
-        :param lda_model: LDA model to use for feature extraction
-        :type lda_model: util.gensim_wrappers.gensim_topicsum_models.GensimTopicSumModel
-        :param w2v_model: Word2Vec model to use for feature extraction
-        :type w2v_model: util.gensim_wrappers.gensim_vector_models.GensimVectorModel
-        :param autoex_model: AutoExtend model to use for feature extraction
-        :type autoex_model: util.gensim_wrappers.gensim_vector_models.GensimVectorModel
+        :param lda_model_getter: function for retrieving LDA model to use for feature extraction
+        :type lda_model_getter: Callable[[], GensimTopicSumModel]
+        :param w2v_model_getter: function for retrieving Word2Vec model to use for feature extraction
+        :type w2v_model_getter: Callable[[], GensimVectorModel]
+        :param autoex_model_getter: function for retrieving AutoExtend model to use for feature extraction
+        :type autoex_model_getter: Callable[[], GensimVectorModel]
         :param betweenness_loc: location of betweenness centrality pkl
         :type betweenness_loc: str
         :param load_loc: location of load centrality pkl
         :type load_loc: str
-        :param glove_model: GloVe model to use for feature extraction
-        :type glove_model: util.gensim_wrappers.gensim_vector_models.GensimVectorModel
-        :param w2g_model: Word2Gauss model to use for feature extraction
-        :type w2g_model: util.word2gauss_wrapper.Word2GaussModel
+        :param glove_model_getter: function for retrieving GloVe model to use for feature extraction
+        :type glove_model_getter: Callable[[], GensimVectorModel]
+        :param w2g_model_getter: function for retrieving Word2Gauss model to use for feature extraction
+        :type w2g_model_getter: Callable[[], Word2GaussModel]
         :param lesk_relations: Location of relations.dat for use with ExtendedLesk
         :type lesk_relations: str
         :param verbose: whether verbose mode should be used or not
         :type verbose: bool
         :param low_memory: specifies whether models should be purged from memory after use. This reduces memory usage but increases disk I/O as models will need to be automatically read back from disk before next use
-        :type low_memory: bool 
+        :type low_memory: bool
     """
     assoc_feat_ext = AssociationFeatureExtractor(features=features,
-                                                lda_model=lda_model,
-                                                w2v_model=w2v_model,
-                                                autoex_model=autoex_model,
+                                                lda_model_getter=lda_model_getter,
+                                                w2v_model_getter=w2v_model_getter,
+                                                autoex_model_getter=autoex_model_getter,
                                                 betweenness_loc=betweenness_loc,
                                                 load_loc=load_loc,
-                                                glove_model=glove_model,
-                                                w2g_model=w2g_model,
+                                                glove_model_getter=glove_model_getter,
+                                                w2g_model_getter=w2g_model_getter,
                                                 lesk_relations=lesk_relations,
                                                 verbose=verbose,
                                                 low_memory=low_memory)
@@ -103,6 +97,13 @@ def train_cattle_ma_2017_association_pipeline(X, y, num_units = None, epochs=50,
     
 
 def main(dataset_to_test):
+    import pickle
+    from util.keras_pipeline_persistance import save_keras_pipeline,\
+        load_keras_pipeline
+    from util.common_models import get_wikipedia_lda, get_google_word2vec,\
+    get_stanford_glove, get_wikipedia_word2gauss, get_google_autoextend
+    import argparse
+    
     parser = argparse.ArgumentParser(description='Association Strength Prediction')
     parser.add_argument('--batchsize', '-b', type=int, default=5000,
                         help='Number of images in each mini-batch')
@@ -170,28 +171,28 @@ def main(dataset_to_test):
     train_y = targets[test_size:]
 
     model = train_cattle_ma_2017_association_pipeline(train_X, train_y, epochs=args.epoch, batchsize=args.batchsize,
-                                                      lda_model=get_wikipedia_lda(),
-                                                      w2v_model=get_google_word2vec(),
-                                                      autoex_model=get_google_autoextend(),
+                                                      lda_model_getter=get_wikipedia_lda,
+                                                      w2v_model_getter=get_google_word2vec,
+                                                      autoex_model_getter=get_google_autoextend,
                                                       betweenness_loc=betweenness_pkl,
                                                       load_loc=load_pkl,
-                                                      glove_model=get_stanford_glove(),
-                                                      w2g_model=get_wikipedia_word2gauss(),
+                                                      glove_model_getter=get_stanford_glove,
+                                                      w2g_model_getter=get_wikipedia_word2gauss,
                                                       lesk_relations=lesk_loc,
                                                       verbose=True)
 #     model = load_keras_pipeline("models/{}".format(dataset_to_test))
     
     print("{}\tTraining finished".format(strftime("%y-%m-%d_%H:%M:%S")))
     
-#     print("{}\tSaving model".format(strftime("%y-%m-%d_%H:%M:%S")))
-# #     from util.gensim_wrappers.gensim_vector_models import purge_all_gensim_vector_models
-# #     from util.word2gauss_wrapper import purge_all_word2gauss_vector_models
-# #     from util.gensim_wrappers.gensim_topicsum_models import purge_all_gensim_topicsum_models
-# #     purge_all_gensim_vector_models()
-# #     purge_all_word2gauss_vector_models()
-# #     purge_all_gensim_topicsum_models()
-#     
-#     save_keras_pipeline("models/{}".format(dataset_to_test), model)
+    print("{}\tSaving model".format(strftime("%y-%m-%d_%H:%M:%S")))
+#     from util.gensim_wrappers.gensim_vector_models import purge_all_gensim_vector_models
+#     from util.word2gauss_wrapper import purge_all_word2gauss_vector_models
+#     from util.gensim_wrappers.gensim_topicsum_models import purge_all_gensim_topicsum_models
+#     purge_all_gensim_vector_models()
+#     purge_all_word2gauss_vector_models()
+#     purge_all_gensim_topicsum_models()
+     
+    save_keras_pipeline("models/{}".format(dataset_to_test), model)
     
     print("{}\tModel saved".format(strftime("%y-%m-%d_%H:%M:%S")))
     
