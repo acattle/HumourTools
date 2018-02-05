@@ -132,7 +132,7 @@ if __name__ == '__main__':
 #     with open("wordnet_graph.pkl", "rb") as wordnet_pickle:
 #         wg = pickle.load(wordnet_pickle)
      
-    from evocation_reader import USFGraph
+    from word_associations.association_readers import USFGraph
     usf = USFGraph("../Data/PairsFSG2.net")
     usf_associations=usf.get_all_associations()
     del usf

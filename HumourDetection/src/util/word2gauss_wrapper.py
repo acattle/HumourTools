@@ -239,9 +239,9 @@ class Word2GaussModel(object):
         return -energy
 
 if __name__ == "__main__":
-    from model_name_consts import WIKIPEDIA_W2G
-    w2g_vocab_loc="c:/vectors/wiki.moreselective.gz"
-    w2g_model_loc="c:/vectors/wiki.hyperparam.selectivevocab.w2g"
+#     from model_name_consts import WIKIPEDIA_W2G
+#     w2g_vocab_loc="c:/vectors/wiki.moreselective.gz"
+#     w2g_model_loc="c:/vectors/wiki.hyperparam.selectivevocab.w2g"
 #     w2g_vocab_loc="/mnt/c/vectors/wiki.moreselective.gz"
 #     w2g_model_loc="/mnt/c/vectors/wiki.hyperparam.selectivevocab.w2g"
     
@@ -289,7 +289,9 @@ if __name__ == "__main__":
 #                 reshape(params['N']*2, -1).copy()
 #         print("acc_grad_sigma = {}s".format(timer() - start))
     
-    w2g = load_word2gauss_model(WIKIPEDIA_W2G, w2g_model_loc, w2g_vocab_loc, lazy_load=False)
+#     w2g = load_word2gauss_model(WIKIPEDIA_W2G, w2g_model_loc, w2g_vocab_loc, lazy_load=False)
+    from util.common_models import get_wikipedia_word2gauss
+    w2g = get_wikipedia_word2gauss()
     
 #     oov_v = w2g.get_vector("afasdfasgasdfgasfgasdfasdfadfs") #try to get the vector for an OOV word
 #     

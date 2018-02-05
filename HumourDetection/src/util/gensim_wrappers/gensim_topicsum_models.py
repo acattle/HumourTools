@@ -319,18 +319,20 @@ class GensimLSIModel(GensimTopicSumModel):
         return self.model
 
 if __name__ == "__main__":
-    from util.model_name_consts import WIKIPEDIA_LDA, WIKIPEDIA_TFIDF
-    lda_loc="c:/vectors/lda_prep_no_lemma/no_lemma.101.lda"
-    word_ids_loc="c:/vectors/lda_prep_no_lemma/lda_no_lemma_wordids.txt.bz2"
-    tfidf_model_loc="c:/vectors/lda_prep_no_lemma/lda_no_lemma.tfidf_model"
-    
-    lda = load_gensim_topicsum_model(WIKIPEDIA_LDA, TYPE_LDA, lda_loc, WIKIPEDIA_TFIDF, word_ids_loc, tfidf_model_loc)
+#     from util.model_name_consts import WIKIPEDIA_LDA, WIKIPEDIA_TFIDF
+#     lda_loc="c:/vectors/lda_prep_no_lemma/no_lemma.101.lda"
+#     word_ids_loc="c:/vectors/lda_prep_no_lemma/lda_no_lemma_wordids.txt.bz2"
+#     tfidf_model_loc="c:/vectors/lda_prep_no_lemma/lda_no_lemma.tfidf_model"
+#     
+#     lda = load_gensim_topicsum_model(WIKIPEDIA_LDA, TYPE_LDA, lda_loc, WIKIPEDIA_TFIDF, word_ids_loc, tfidf_model_loc)
+    from util.common_models import get_wikipedia_lda
+    lda = get_wikipedia_lda()
     
     topic_vec = lda.get_vector("the king wears a king and lives in the king house")
     
     print("topic_vec shape? {}".format(topic_vec.shape))
     
-    purge_gensim_topicsum_model(WIKIPEDIA_LDA, True, True)
+    purge_gensim_topicsum_model("Wikipedia LDA", True, True)
     
     lda.get_vector("the king wears a king and lives in the king house")
 

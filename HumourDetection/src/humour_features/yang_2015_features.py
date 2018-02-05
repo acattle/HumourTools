@@ -21,8 +21,6 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.neighbors import NearestNeighbors
 from humour_features.utils.common_features import get_alliteration_and_rhyme_features,\
     get_interword_score_features
-from util.gensim_wrappers.gensim_vector_models import load_gensim_vector_model
-from util.model_name_consts import GOOGLE_W2V
 import logging
 
 def _convert_pos_to_wordnet(treebank_tag):
@@ -37,7 +35,7 @@ def _convert_pos_to_wordnet(treebank_tag):
     else:
         return ''
 
-def train_yang_et_al_2015_pipeline(X, y, w2v_loc, wilson_lexicon_loc, k=5, **rf_kwargs):
+def train_yang_et_al_2015_pipeline(X, y, w2v_model, wilson_lexicon_loc, k=5, **rf_kwargs):
     """
         Train a  humour classifier using Yang et al. (2015)'s Word2Vec+HCF
         feature set
@@ -46,8 +44,8 @@ def train_yang_et_al_2015_pipeline(X, y, w2v_loc, wilson_lexicon_loc, k=5, **rf_
         :type X: Iterable[Iterable[str]]
         :param y: training labels
         :type y: Iterable[int]
-        :param w2v_loc: location of Google-style Word2Vec model (must be binary)
-        :type w2v_loc: str
+        :param w2v_model: the Word2Vec model
+        :type w2v_model: GensimVectorModel
         :param wilson_lexicon_loc: location of Wilson et al. (2005) lexicon file
         :type wilson_lexicon_loc: str
         :param k: the number of neighbors to use for KNN features
@@ -61,14 +59,14 @@ def train_yang_et_al_2015_pipeline(X, y, w2v_loc, wilson_lexicon_loc, k=5, **rf_
     
     from sklearn.pipeline import Pipeline
     from sklearn.ensemble.forest import RandomForestClassifier
-    yang_pipeline = Pipeline([("extract_features", YangHumourFeatureExtractor(w2v_loc,wilson_lexicon_loc,k)),
+    yang_pipeline = Pipeline([("extract_features", YangHumourFeatureExtractor(w2v_model,wilson_lexicon_loc,k)),
                               ("random_forest_classifier", RandomForestClassifier(**rf_kwargs))
                               ])
     yang_pipeline.fit(X,y)
     
     return yang_pipeline
 
-def run_yang_et_al_2015_baseline(train, test, w2v_loc,wilson_lexicon_loc):
+def run_yang_et_al_2015_baseline(train, test, w2v_model, wilson_lexicon_loc):
     """
         Convenience method for running Yang et al. (2015) humour classification
         experiment on a specified dataset. This is equivalent to running
@@ -78,14 +76,14 @@ def run_yang_et_al_2015_baseline(train, test, w2v_loc,wilson_lexicon_loc):
         :type train: Tuple[Iterable[Iterable[str]], Iterable[int]]
         :param test: A tuple containing training documents and labels. Each document should be a sequence of tokens.
         :type test: Tuple[Iterable[Iterable[str]], Iterable[int]]
-        :param w2v_loc: location of Google-style Word2Vec model (must be binary)
-        :type w2v_loc: str
+        :param w2v_model: the Word2Vec model
+        :type w2v_model: GensimVectorModel
         :param wilson_lexicon_loc: location of Wilson et al. (2005) lexicon file
         :type wilson_lexicon_loc: str  
     """
     
     train_X, train_y = train
-    yang_pipeline = train_yang_et_al_2015_pipeline(train_X, train_y, w2v_loc, wilson_lexicon_loc, k=5) #Yang et al. (2015) use a K of 5
+    yang_pipeline = train_yang_et_al_2015_pipeline(train_X, train_y, w2v_model, wilson_lexicon_loc, k=5) #Yang et al. (2015) use a K of 5
     
     test_X, test_y = test
     pred_y = yang_pipeline.predict(test_X)
@@ -105,7 +103,7 @@ class YangHumourFeatureExtractor(TransformerMixin):
         scikit-learn transformer, suitable for use in scikit-learn pipelines.
     """
     
-    def __init__(self, w2v_loc, wilson_lexicon_loc, k=5, verbose=False):
+    def __init__(self, w2v_model, wilson_lexicon_loc, k=5, verbose=False):
         """
             Configure Yang et al. (2015) feature extraction options including
             Word2Vec model and Wilson et al. (2005) subjectivity lexicon
@@ -115,8 +113,8 @@ class YangHumourFeatureExtractor(TransformerMixin):
                 Recognizing Contextual Polarity in Phrase-Level Sentiment
                 Analysis. Proceedings of HLT/EMNLP 2005, Vancouver, Canada.
             
-            :param w2v_loc: location of Google-style Word2Vec model (must be binary)
-            :type w2v_loc: str
+            :param w2v_model: the Word2Vec model
+            :type w2v_model: GensimVectorModel
             :param wilson_lexicon_loc: location of Wilson et al. (2005) lexicon file
             :type wilson_lexicon_loc: str
             :param k: Specifies the number of KNN labels to extract
@@ -124,8 +122,7 @@ class YangHumourFeatureExtractor(TransformerMixin):
             :param verbose: whether we should use verbose mode or not
             :type verbose: bool
         """
-        self.w2v_loc = w2v_loc
-        self.w2v_model = None
+        self.w2v_model = w2v_model
         self.wilson_lexicon_loc = wilson_lexicon_loc
         self.wilson_lexicon=None
         self.k=k
@@ -136,18 +133,6 @@ class YangHumourFeatureExtractor(TransformerMixin):
         self.logger = logging.getLogger(__name__)
         if verbose:
             self.logger.setLevel(logging.DEBUG)
-    
-    def _get_w2v_model(self):
-        """
-            Method for lazy loading Word2Vec model
-            
-            :return: A gensim word2vec model in a convenience wrapper
-            :rtype: GensimVectorModel
-        """
-        if self.w2v_model == None:
-            self.w2v_model = load_gensim_vector_model(GOOGLE_W2V, self.w2v_loc)
-        
-        return self.w2v_model
 
     def _get_wilson_lexicon(self):
         """
@@ -198,7 +183,7 @@ class YangHumourFeatureExtractor(TransformerMixin):
             :return: A matrix representing the extracted incongruity features in the form (disconnection, repetition) x # of documents
             :rtype: numpy.array
         """
-        scorer = self._get_w2v_model().get_similarity
+        scorer = self.w2v_model.get_similarity
         incong_features = get_interword_score_features(documents, scorer)
         #Yang et al. (2015) only care about max and min Word2Vec similarities
         #Therefore we should delete column 1 (first 1 is the column index. second 1 is axis)
@@ -341,9 +326,9 @@ class YangHumourFeatureExtractor(TransformerMixin):
         averaged_w2vs=[]
         for document in documents:
             #TODO: Should we omit OOV words?
-            sum_vector = np.zeros(self._get_w2v_model().get_dimensions()) #initialize sum to be a vector of 0s the same dimensions as the model
+            sum_vector = np.zeros(self.w2v_model.get_dimensions()) #initialize sum to be a vector of 0s the same dimensions as the model
             for word in document:
-                sum_vector = sum_vector + self._get_w2v_model().get_vector(word)
+                sum_vector = sum_vector + self.w2v_model.get_vector(word)
             
             averaged_w2vs.append(sum_vector / len(document))
         
@@ -532,7 +517,7 @@ class YangHumourAnchorExtractor:
 if __name__ == "__main__":
     potd_loc = "D:/datasets/pun of the day/puns_pos_neg_data.csv"
     oneliners_loc = "D:/datasets/16000 oneliners/Jokes16000.txt"
-    w2v_loc = "C:/vectors/GoogleNews-vectors-negative300.bin"
+#     w2v_loc = "C:/vectors/GoogleNews-vectors-negative300.bin"
     
 #     potd_loc = "/mnt/d/datasets/pun of the day/puns_pos_neg_data.csv"
 #     oneliners_loc = "/mnt/d/datasets/16000 oneliners/Jokes16000.txt"
@@ -572,7 +557,8 @@ if __name__ == "__main__":
       
     X,y = zip(*docs_and_labels)
     print("starting training")
-    yang = train_yang_et_al_2015_pipeline(X, y, w2v_loc, wilson_lexicon_loc, n_estimators=100, min_samples_leaf=100, n_jobs=-1)
+    from util.common_models import get_google_word2vec
+    yang = train_yang_et_al_2015_pipeline(X, y, get_google_word2vec(), wilson_lexicon_loc, n_estimators=100, min_samples_leaf=100, n_jobs=-1)
     print("training complete\n\n")
      
 # #     #save the model
