@@ -36,7 +36,7 @@ def _convert_pos_to_wordnet(treebank_tag):
     else:
         return ''
 
-def train_yang_et_al_2015_pipeline(X, y, w2v_model, wilson_lexicon_loc, k=5, **rf_kwargs):
+def train_yang_et_al_2015_pipeline(X, y, w2v_model_getter, wilson_lexicon_loc, k=5, **rf_kwargs):
     """
         Train a  humour classifier using Yang et al. (2015)'s Word2Vec+HCF
         feature set
@@ -45,8 +45,8 @@ def train_yang_et_al_2015_pipeline(X, y, w2v_model, wilson_lexicon_loc, k=5, **r
         :type X: Iterable[Iterable[str]]
         :param y: training labels
         :type y: Iterable[int]
-        :param w2v_model: the Word2Vec model
-        :type w2v_model: GensimVectorModel
+        :param w2v_model_getter: function for retrieving the Word2Vec model
+        :type w2v_model_getter: Callable[[], GensimVectorModel]
         :param wilson_lexicon_loc: location of Wilson et al. (2005) lexicon file
         :type wilson_lexicon_loc: str
         :param k: the number of neighbors to use for KNN features
@@ -60,14 +60,14 @@ def train_yang_et_al_2015_pipeline(X, y, w2v_model, wilson_lexicon_loc, k=5, **r
     
     from sklearn.pipeline import Pipeline
     from sklearn.ensemble.forest import RandomForestClassifier
-    yang_pipeline = Pipeline([("extract_features", YangHumourFeatureExtractor(w2v_model,wilson_lexicon_loc,k)),
+    yang_pipeline = Pipeline([("extract_features", YangHumourFeatureExtractor(w2v_model_getter,wilson_lexicon_loc,k)),
                               ("random_forest_classifier", RandomForestClassifier(**rf_kwargs))
                               ])
     yang_pipeline.fit(X,y)
     
     return yang_pipeline
 
-def run_yang_et_al_2015_baseline(train, test, w2v_model, wilson_lexicon_loc):
+def run_yang_et_al_2015_baseline(train, test, w2v_model_getter, wilson_lexicon_loc):
     """
         Convenience method for running Yang et al. (2015) humour classification
         experiment on a specified dataset. This is equivalent to running
@@ -77,14 +77,14 @@ def run_yang_et_al_2015_baseline(train, test, w2v_model, wilson_lexicon_loc):
         :type train: Tuple[Iterable[Iterable[str]], Iterable[int]]
         :param test: A tuple containing training documents and labels. Each document should be a sequence of tokens.
         :type test: Tuple[Iterable[Iterable[str]], Iterable[int]]
-        :param w2v_model: the Word2Vec model
-        :type w2v_model: GensimVectorModel
+        :param w2v_model_getter: function for retrieving the Word2Vec model
+        :type w2v_model_getter: Callable[[], GensimVectorModel]
         :param wilson_lexicon_loc: location of Wilson et al. (2005) lexicon file
         :type wilson_lexicon_loc: str  
     """
     
     train_X, train_y = train
-    yang_pipeline = train_yang_et_al_2015_pipeline(train_X, train_y, w2v_model, wilson_lexicon_loc, k=5) #Yang et al. (2015) use a K of 5
+    yang_pipeline = train_yang_et_al_2015_pipeline(train_X, train_y, w2v_model_getter, wilson_lexicon_loc, k=5) #Yang et al. (2015) use a K of 5
     
     test_X, test_y = test
     pred_y = yang_pipeline.predict(test_X)
@@ -104,7 +104,7 @@ class YangHumourFeatureExtractor(TransformerMixin, LoggerMixin):
         scikit-learn transformer, suitable for use in scikit-learn pipelines.
     """
     
-    def __init__(self, w2v_model, wilson_lexicon_loc, k=5, verbose=False):
+    def __init__(self, w2v_model_getter, wilson_lexicon_loc, k=5, verbose=False):
         """
             Configure Yang et al. (2015) feature extraction options including
             Word2Vec model and Wilson et al. (2005) subjectivity lexicon
@@ -114,8 +114,8 @@ class YangHumourFeatureExtractor(TransformerMixin, LoggerMixin):
                 Recognizing Contextual Polarity in Phrase-Level Sentiment
                 Analysis. Proceedings of HLT/EMNLP 2005, Vancouver, Canada.
             
-            :param w2v_model: the Word2Vec model
-            :type w2v_model: GensimVectorModel
+            :param w2v_model_getter: function for retrieving the Word2Vec model
+            :type w2v_model_getter: Callable[[], GensimVectorModel]
             :param wilson_lexicon_loc: location of Wilson et al. (2005) lexicon file
             :type wilson_lexicon_loc: str
             :param k: Specifies the number of KNN labels to extract
@@ -123,7 +123,7 @@ class YangHumourFeatureExtractor(TransformerMixin, LoggerMixin):
             :param verbose: whether we should use verbose mode or not
             :type verbose: bool
         """
-        self.w2v_model = w2v_model
+        self.get_w2v_model = w2v_model_getter
         self.wilson_lexicon_loc = wilson_lexicon_loc
         self.wilson_lexicon=None
         self.k=k
@@ -326,9 +326,9 @@ class YangHumourFeatureExtractor(TransformerMixin, LoggerMixin):
         averaged_w2vs=[]
         for document in documents:
             #TODO: Should we omit OOV words?
-            sum_vector = np.zeros(self.w2v_model.get_dimensions()) #initialize sum to be a vector of 0s the same dimensions as the model
+            sum_vector = np.zeros(self.get_w2v_model().get_dimensions()) #initialize sum to be a vector of 0s the same dimensions as the model
             for word in document:
-                sum_vector = sum_vector + self.w2v_model.get_vector(word)
+                sum_vector = sum_vector + self.get_w2v_model().get_vector(word)
             
             averaged_w2vs.append(sum_vector / len(document))
         
@@ -538,10 +538,11 @@ if __name__ == "__main__":
     random.seed(10)
     random.shuffle(docs_and_labels)
           
-#     test_size = round(len(docs_and_labels)*0.1) #hold out 10% as test
-#     
-#     test_X, test_y = zip(*docs_and_labels[:test_size]) #unzip the documents and labels
-#     train_X, train_y = zip(*docs_and_labels[test_size:])
+    from util.common_models import get_google_word2vec
+    test_size = round(len(docs_and_labels)*0.1) #hold out 10% as test
+    test_X, test_y = zip(*docs_and_labels[:test_size]) #unzip the documents and labels
+    train_X, train_y = zip(*docs_and_labels[test_size:])
+    run_yang_et_al_2015_baseline((train_X, train_y), (test_X, test_y), get_google_word2vec, wilson_lexicon_loc)
           
           
 #     yang = YangHumourFeatureExtractor(w2v_loc,wilson_lexicon_loc)
@@ -555,72 +556,70 @@ if __name__ == "__main__":
           
 #     print(timeit.timeit("run_yang_et_al_2015_baseline((train_X, train_y), (test_X, test_y), w2v_loc, wilson_lexicon_loc,n_jobs=4)", "from __main__ import run_yang_et_al_2015_baseline,train_X,train_y,test_X,test_y,w2v_loc,wilson_lexicon_loc",number=1))
       
-    X,y = zip(*docs_and_labels)
-    print("starting training")
-    from util.common_models import get_google_word2vec
-    yang = train_yang_et_al_2015_pipeline(X, y, get_google_word2vec(), wilson_lexicon_loc, n_estimators=100, min_samples_leaf=100, n_jobs=-1)
-    print("training complete\n\n")
-     
-# #     #save the model
-# #     yang.named_steps["extract_features"]._purge_w2v_model() #smaller pkl
-# #     from sklearn.externals import joblib
-# #     joblib.dump(yang, "yang_pipeline_ubuntu.pkl")
-#     import dill
-#     with open("yang_pipeline_ubuntu_100minsamples_class.dill", "wb") as yang_f:
-#         dill.dump(yang, yang_f)
-# #     with open("yang_pipeline_ubuntu_100minsamples.dill", "rb") as yang_f:
-# #         yang=dill.load(yang_f)
-#  
-# # #     from sklearn.preprocessing.data import StandardScaler
-# # # #     from sklearn.svm.classes import LinearSVC
-# # #     from sklearn.linear_model import LogisticRegression
-# # #     from sklearn.pipeline import Pipeline
-# # #     dumb_classifier = Pipeline([("count vector", CountVectorizer()),
-# # # #                                 ("scale", StandardScaler()),
-# # #                                 ("logistic regression", LogisticRegression())
-# # #                                 ])
-# # #     dumb_classifier.fit(X,y)
-# # #     print('fitted')
-# # #     with open("bow_lr.dill", "wb") as bow_f:
-# # #         dill.dump(dumb_classifier, bow_f)
-# #     with open("bow_lr.dill", "rb") as bow_f:
-# #         dumb_classifier = dill.load(bow_f)
-        
-        
-    oneliners = []
-    with open(oneliners_loc, "r", encoding="latin-1") as oneliners_f:
-        for line in oneliners_f:
-#             words = nltk.word_tokenize(line.lower())
-#             words = [w for w in words if w.isalpha()]
-              
-            oneliners.append(line.strip())
-            if len(oneliners) >= 10:
-                break
-    
-#     class StatParserWrapper():
-#         def __init__(self,parser):
-#             self.parser=parser
+#     X,y = zip(*docs_and_labels)
+#     print("starting training")
+#     yang = train_yang_et_al_2015_pipeline(X, y, get_google_word2vec, wilson_lexicon_loc, n_estimators=100, min_samples_leaf=100, n_jobs=-1)
+#     print("training complete\n\n")
+#      
+# # #     #save the model
+# # #     yang.named_steps["extract_features"]._purge_w2v_model() #smaller pkl
+# # #     from sklearn.externals import joblib
+# # #     joblib.dump(yang, "yang_pipeline_ubuntu.pkl")
+# #     import dill
+# #     with open("yang_pipeline_ubuntu_100minsamples_class.dill", "wb") as yang_f:
+# #         dill.dump(yang, yang_f)
+# # #     with open("yang_pipeline_ubuntu_100minsamples.dill", "rb") as yang_f:
+# # #         yang=dill.load(yang_f)
+# #  
+# # # #     from sklearn.preprocessing.data import StandardScaler
+# # # # #     from sklearn.svm.classes import LinearSVC
+# # # #     from sklearn.linear_model import LogisticRegression
+# # # #     from sklearn.pipeline import Pipeline
+# # # #     dumb_classifier = Pipeline([("count vector", CountVectorizer()),
+# # # # #                                 ("scale", StandardScaler()),
+# # # #                                 ("logistic regression", LogisticRegression())
+# # # #                                 ])
+# # # #     dumb_classifier.fit(X,y)
+# # # #     print('fitted')
+# # # #     with open("bow_lr.dill", "wb") as bow_f:
+# # # #         dill.dump(dumb_classifier, bow_f)
+# # #     with open("bow_lr.dill", "rb") as bow_f:
+# # #         dumb_classifier = dill.load(bow_f)
 #         
-#         def parse(self, document):
-#             return self.parser.parse(" ".join(document))
-
-#     from stat_parser import Parser
-    from parser.bllip_wrapper import BllipParser
-    bllip = BllipParser()
-
-    
-    anchor_extractor = YangHumourAnchorExtractor(bllip.parse, yang, 3)
-#     count = 0
-    for oneliner in oneliners:
-#         if label==1:
-        anchors= anchor_extractor.find_humour_anchors(oneliner)
-        print(oneliner)
-        print(anchors)
-        print("\n")
-#         count+=1
-#         if count >9:
-#             break
-    
-    
-    #TODO: classifier vs regressor for anchor extractor
+#         
+#     oneliners = []
+#     with open(oneliners_loc, "r", encoding="latin-1") as oneliners_f:
+#         for line in oneliners_f:
+# #             words = nltk.word_tokenize(line.lower())
+# #             words = [w for w in words if w.isalpha()]
+#               
+#             oneliners.append(line.strip())
+#             if len(oneliners) >= 10:
+#                 break
+#     
+# #     class StatParserWrapper():
+# #         def __init__(self,parser):
+# #             self.parser=parser
+# #         
+# #         def parse(self, document):
+# #             return self.parser.parse(" ".join(document))
+# 
+# #     from stat_parser import Parser
+#     from parser.bllip_wrapper import BllipParser
+#     bllip = BllipParser()
+# 
+#     
+#     anchor_extractor = YangHumourAnchorExtractor(bllip.parse, yang, 3)
+# #     count = 0
+#     for oneliner in oneliners:
+# #         if label==1:
+#         anchors= anchor_extractor.find_humour_anchors(oneliner)
+#         print(oneliner)
+#         print(anchors)
+#         print("\n")
+# #         count+=1
+# #         if count >9:
+# #             break
+#     
+#     
     
