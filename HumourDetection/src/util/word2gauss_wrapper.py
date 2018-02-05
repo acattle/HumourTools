@@ -34,7 +34,7 @@ def load_word2gauss_model(model_name, model_loc, vocab_loc, lazy_load=True):
         :rtype: Word2GaussModel
     """
     if model_name in _models:
-        logging.warning("'{}' already loaded. Will use existing instance.".format(model_name))
+        logging.info("'{}' already loaded. Will use existing instance.".format(model_name))
     else:
         _models[model_name] = Word2GaussModel(model_loc, vocab_loc, lazy_load)
         

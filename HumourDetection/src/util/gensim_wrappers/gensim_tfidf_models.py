@@ -39,7 +39,7 @@ def load_gensim_tfidf_model(model_name, word_ids_loc, tfidf_model_loc, tokenizer
         :rtype: GensimTfidfModel
     """
     if model_name in _models:
-        logging.warning("'{}' already loaded. Will use existing instance.".format(model_name))
+        logging.info("'{}' already loaded. Will use existing instance.".format(model_name))
     else:
         _models[model_name] = GensimTFIDFModel(word_ids_loc, tfidf_model_loc, tokenizer, cache, lazy_load)
         
