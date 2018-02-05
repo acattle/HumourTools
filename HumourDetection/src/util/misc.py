@@ -29,6 +29,7 @@ def default_preprocessing_and_tokenization(documents):
             tokens[i] = tokens[i].translate(None, punctuation) #remove punctuation
             #https://stackoverflow.com/questions/265960/best-way-to-strip-punctuation-from-a-string-in-python
             #TODO: should be doing this in place like this?
+            #TODO: will result on punctuation only tokens becoming empty string tokens
         
         preprocessed_documents.append(tokens)
     
