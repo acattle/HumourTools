@@ -9,8 +9,6 @@ from util.gensim_wrappers.gensim_vector_models import load_gensim_vector_model
 from util.word2gauss_wrapper import load_word2gauss_model
 from util.gensim_wrappers.gensim_topicsum_models import load_gensim_topicsum_model,\
     TYPE_LDA, TYPE_LSI
-MODEL_NAME = "model_name"
-MODEL_LOC = "model_loc"
 
 ############################# Gensim Vector Models #############################
 def get_google_word2vec():
@@ -24,9 +22,13 @@ def get_google_autoextend():
 
 
 
+
+
 ############################## Word2Gauss Models ###############################
 def get_wikipedia_word2gauss():
-    return load_word2gauss_model("Wikipedia Word2Gauss", "c:/vectors/wiki.moreselective.gz", "c:/vectors/wiki.hyperparam.selectivevocab.w2g",False)
+    return load_word2gauss_model("Wikipedia Word2Gauss", "c:/vectors/wiki.hyperparam.selectivevocab.w2g", "c:/vectors/wiki.moreselective.gz")
+
+
 
 
 

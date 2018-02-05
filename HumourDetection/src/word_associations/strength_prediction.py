@@ -150,7 +150,6 @@ def main(dataset_to_test):
     train_y = targets[test_size:]
 
     model = train_cattle_ma_2017_association_pipeline(train_X, train_y, epochs=args.epoch, batchsize=args.batchsize,
-                                                      features=[FEAT_W2G_SIM],
                                                       lda_model=get_wikipedia_lda(),
                                                       w2v_model=get_google_word2vec(),
                                                       autoex_model=get_google_autoextend(),
