@@ -33,7 +33,8 @@ def _create_mlp(num_units=None, input_dim=None):
     model.compile(loss="mse", optimizer="adam")
     return model
 
-def train_cattle_ma_2017_association_pipeline(X, y, num_units = None, epochs=50, batchsize=5000, features=DEFAULT_FEATS, lda_model=None, w2v_model=None, autoex_model=None, betweenness_loc=None, load_loc=None,  glove_model=None, w2g_model=None, lesk_relations=None, verbose=False):
+def train_cattle_ma_2017_association_pipeline(X, y, num_units = None, epochs=50, batchsize=5000, features=DEFAULT_FEATS, lda_model=None, w2v_model=None, autoex_model=None, betweenness_loc=None, load_loc=None,  glove_model=None, w2g_model=None, lesk_relations=None, verbose=False, low_memory=True):
+
     """
         Create an association prediction pipeline including feature extraction
         and neural network regressor as described in "Predicting Word
@@ -55,8 +56,26 @@ def train_cattle_ma_2017_association_pipeline(X, y, num_units = None, epochs=50,
         :type batchsize: int
         :param features: list of association features to extract
         :type features: Iterable[str]
-        :param lda_loc: location of Gensim LDA model
-        :param wordids_loc: location of 
+        :param lda_model: LDA model to use for feature extraction
+        :type lda_model: util.gensim_wrappers.gensim_topicsum_models.GensimTopicSumModel
+        :param w2v_model: Word2Vec model to use for feature extraction
+        :type w2v_model: util.gensim_wrappers.gensim_vector_models.GensimVectorModel
+        :param autoex_model: AutoExtend model to use for feature extraction
+        :type autoex_model: util.gensim_wrappers.gensim_vector_models.GensimVectorModel
+        :param betweenness_loc: location of betweenness centrality pkl
+        :type betweenness_loc: str
+        :param load_loc: location of load centrality pkl
+        :type load_loc: str
+        :param glove_model: GloVe model to use for feature extraction
+        :type glove_model: util.gensim_wrappers.gensim_vector_models.GensimVectorModel
+        :param w2g_model: Word2Gauss model to use for feature extraction
+        :type w2g_model: util.word2gauss_wrapper.Word2GaussModel
+        :param lesk_relations: Location of relations.dat for use with ExtendedLesk
+        :type lesk_relations: str
+        :param verbose: whether verbose mode should be used or not
+        :type verbose: bool
+        :param low_memory: specifies whether models should be purged from memory after use. This reduces memory usage but increases disk I/O as models will need to be automatically read back from disk before next use
+        :type low_memory: bool 
     """
     assoc_feat_ext = AssociationFeatureExtractor(features=features,
                                                 lda_model=lda_model,
@@ -67,7 +86,8 @@ def train_cattle_ma_2017_association_pipeline(X, y, num_units = None, epochs=50,
                                                 glove_model=glove_model,
                                                 w2g_model=w2g_model,
                                                 lesk_relations=lesk_relations,
-                                                verbose=verbose)
+                                                verbose=verbose,
+                                                low_memory=low_memory)
        
     input_dim = assoc_feat_ext.get_num_dimensions()
     if num_units == None:
