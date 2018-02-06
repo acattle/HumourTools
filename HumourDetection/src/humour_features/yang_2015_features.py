@@ -183,7 +183,8 @@ class YangHumourFeatureExtractor(TransformerMixin, LoggerMixin):
             :return: A matrix representing the extracted incongruity features in the form (disconnection, repetition) x # of documents
             :rtype: numpy.array
         """
-        scorer = self.w2v_model.get_similarity
+        
+        scorer=self.get_w2v_model().get_similarity
         incong_features = get_interword_score_features(documents, scorer)
         #Yang et al. (2015) only care about max and min Word2Vec similarities
         #Therefore we should delete column 1 (first 1 is the column index. second 1 is axis)
