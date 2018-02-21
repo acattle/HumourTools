@@ -4,27 +4,30 @@ Created on Jan 9, 2017
 @author: Andrew Cattle <acattle@cse.ust.hk>
 '''
 from time import strftime
-from scipy.stats.stats import spearmanr, pearsonr
+from scipy.stats.stats import spearmanr, pearsonr as sk_pearsonr #TODO: normal
 from keras.models import Sequential
 from keras.layers import Dense, Dropout
-from os.path import join
 from keras.wrappers.scikit_learn import KerasRegressor
 from word_associations.association_feature_extractor import AssociationFeatureExtractor, DEFAULT_FEATS
+import numpy as np
+from util.keras_metrics import r2_score, pearsonr
 from sklearn.pipeline import Pipeline
 
 
 def _create_mlp(num_units=None, input_dim=None):
+def _create_mlp(num_units=None, input_dim=None, metrics=[],optimizer="adam", dropout=0.5,initializer='glorot_uniform'): #r2_score,pearsonr
     if num_units == None:
         raise ValueError("num_units cannot be None. Please specify a value.")
     if input_dim == None:
         raise ValueError("input_dim cannot be None. Please specify a value.")
     model = Sequential()
-    model.add(Dense(num_units, input_dim=input_dim))
-    model.add(Dropout(0.5))
-    model.add(Dense(num_units, input_dim=num_units))
-    model.add(Dropout(0.5))
-    model.add(Dense(1, input_dim=num_units, activation="relu"))
-    model.compile(loss="mse", optimizer="adam")
+    model.add(Dense(num_units, input_dim=input_dim, kernel_initializer=initializer))
+    model.add(Dropout(dropout))
+    model.add(Dense(num_units, input_dim=num_units, kernel_initializer=initializer))
+    model.add(Dropout(dropout))
+    model.add(Dense(1, input_dim=num_units, activation="sigmoid")) #sigmoid
+#     optimizer = Adam(lr=0.005, decay=0.0)
+    model.compile(loss="binary_crossentropy", optimizer=optimizer, metrics=metrics) #binary_crossentropy
     return model
 
 def train_cattle_ma_2017_association_pipeline(X, y, num_units = None, epochs=50, batchsize=5000, features=DEFAULT_FEATS, lda_model_getter=None, w2v_model_getter=None, autoex_model_getter=None, betweenness_loc=None, load_loc=None,  glove_model_getter=None, w2g_model_getter=None, lesk_relations=None, verbose=False, low_memory=True):
@@ -96,13 +99,18 @@ def train_cattle_ma_2017_association_pipeline(X, y, num_units = None, epochs=50,
     return evoc_est_pipeline
     
 
-def main(dataset_to_test):
+def main(dataset):
+    """
+    :param dataset: (<name>, <word_pairs>, <strengths>)
+    :type dataset: Tuple[str, Iterable[Tuple[str, str], float]]
+    """
     import pickle
     from util.keras_pipeline_persistance import save_keras_pipeline,\
         load_keras_pipeline
-    from util.common_models import get_wikipedia_lda, get_google_word2vec,\
+    from util.model_wrappers.common_models import get_wikipedia_lda, get_google_word2vec,\
     get_stanford_glove, get_wikipedia_word2gauss, get_google_autoextend
     import argparse
+    import random
     
     parser = argparse.ArgumentParser(description='Association Strength Prediction')
     parser.add_argument('--batchsize', '-b', type=int, default=5000,
@@ -124,52 +132,29 @@ def main(dataset_to_test):
     print('# Minibatch-size: {}'.format(args.batchsize))
     print('# epoch: {}'.format(args.epoch))
     print('')
-    
-    pickle_dir = "features/{}".format(dataset_to_test)
 
     print("{}\tStarting test".format(strftime("%y-%m-%d_%H:%M:%S")))
-
-#     lda_loc="c:/vectors/lda_prep_no_lemma/no_lemma.101.lda"
-#     wordids_loc="c:/vectors/lda_prep_no_lemma/lda_no_lemma_wordids.txt.bz2"
-#     tfidf_loc="c:/vectors/lda_prep_no_lemma/lda_no_lemma.tfidf_model"
-#     w2v_loc="c:/vectors/GoogleNews-vectors-negative300.bin"
-#     glove_loc="c:/vectors/glove.840B.300d.withheader.bin"
-#     # w2g_model_loc="c:/vectors/wiki.biggervocab.w2g"
-#     # w2g_vocab_loc="c:/vectors/wiki.biggersize.gz"
-#     w2g_vocab_loc="c:/vectors/wiki.moreselective.gz"
-#     w2g_model_loc="c:/vectors/wiki.hyperparam.selectivevocab.w2g"
-#     autoex_loc = "c:/vectors/autoextend.word2vecformat.bin"
+    
     lesk_loc = "d:/git/PyWordNetSimilarity/PyWordNetSimilarity/src/lesk-relation.dat"
-     
-#         lda_loc="/mnt/c/vectors/lda_prep_no_lemma/no_lemma.101.lda"
-#         wordids_loc="/mnt/c/vectors/lda_prep_no_lemma/lda_no_lemma_wordids.txt.bz2"
-#         tfidf_loc="/mnt/c/vectors/lda_prep_no_lemma/lda_no_lemma.tfidf_model"
-#         w2v_loc="/mnt/c/vectors/GoogleNews-vectors-negative300.bin"
-#         glove_loc="/mnt/c/vectors/glove.840B.300d.withheader.bin"
-#         # w2g_model_loc="/mnt/c/vectors/wiki.biggervocab.w2g"
-#         # w2g_vocab_loc="/mnt/c/vectors/wiki.biggersize.gz"
-#         w2g_vocab_loc="/mnt/c/vectors/wiki.moreselective.gz"
-#         w2g_model_loc="/mnt/c/vectors/wiki.hyperparam.selectivevocab.w2g"
-#         autoex_loc = "/mnt/c/vectors/autoextend.word2vecformat.bin"
-#         lesk_loc = "/mnt/d/git/PyWordNetSimilarity/PyWordNetSimilarity/src/lesk-relation.dat"
+#     lesk_loc = "/mnt/d/git/PyWordNetSimilarity/PyWordNetSimilarity/src/lesk-relation.dat"
+    betweenness_pkl="d:/git/HumourDetection/HumourDetection/src/word_associations/wordnet_betweenness.pkl"
+    load_pkl="d:/git/HumourDetection/HumourDetection/src/word_associations/wordnet_load.pkl"
     
-    betweenness_pkl="wordnet_betweenness.pkl"
-    load_pkl="wordnet_load.pkl"
+    name, data = dataset
+    random.seed(10)
+    random.shuffle(data)
+    word_pairs, strengths = zip(*data)
+        
+    strengths = np.array(strengths)
+#     targets = targets*100 #seems to help
+    test_size = int(strengths.shape[0] * 0.2) #hold out 20% for testing
+         
+    test_X = word_pairs[:test_size]
+    train_X= word_pairs[test_size:]
+          
+    test_y = strengths[:test_size]
+    train_y = strengths[test_size:]
     
-    with open(join(pickle_dir, "word_pairs.pkl"), "rb") as words_file:
-        stimuli_response = pickle.load(words_file, encoding="latin1")
-    with open(join(pickle_dir, "strengths.pkl"), "rb") as strength_file:
-        targets = pickle.load(strength_file, encoding="latin1")#https://stackoverflow.com/questions/28218466/unpickling-a-python-2-object-with-python-3
-    targets = targets*100 #seems to help
-    test_size = int(targets.shape[0] * 0.2) #hold out 20% for testing
-    
-    #TODO: don't train on test
-    test_X = stimuli_response[:test_size]
-    train_X= stimuli_response[test_size:]
-     
-    test_y = targets[:test_size]
-    train_y = targets[test_size:]
-
     model = train_cattle_ma_2017_association_pipeline(train_X, train_y, epochs=args.epoch, batchsize=args.batchsize,
                                                       lda_model_getter=get_wikipedia_lda,
                                                       w2v_model_getter=get_google_word2vec,
@@ -182,7 +167,6 @@ def main(dataset_to_test):
                                                       verbose=True)
 #     model = load_keras_pipeline("models/{}".format(dataset_to_test))
     
-    print("{}\tTraining finished".format(strftime("%y-%m-%d_%H:%M:%S")))
     
     print("{}\tSaving model".format(strftime("%y-%m-%d_%H:%M:%S")))
 #     from util.gensim_wrappers.gensim_vector_models import purge_all_gensim_vector_models
@@ -194,21 +178,39 @@ def main(dataset_to_test):
      
     save_keras_pipeline("models/{}".format(dataset_to_test), model)
     
+    model.fit(train_X, train_y, validation_data=(test_X, test_y))
+      
+    print("{}\tTraining finished".format(strftime("%y-%m-%d_%H:%M:%S")))
+     
+    print("{}\tSaving model".format(strftime("%y-%m-%d_%H:%M:%S"))) 
+    save_keras_pipeline("models/{}".format(name), p)
     print("{}\tModel saved".format(strftime("%y-%m-%d_%H:%M:%S")))
     
+#     model = load_keras_pipeline("models/{}-all".format(name))
+         
     print("{}\tStarting test".format(strftime("%y-%m-%d_%H:%M:%S")))
     test_pred=model.predict(test_X)
+    
 #         test_y = test_y.reshape((-1,1))
-    print()
-    print(spearmanr(test_y, test_pred))
+    print(f"{name} pred: {test_pred}")
+    print(f"{name} spearman {spearmanr(test_y, test_pred)}")
 #         test_pred=test_pred.flatten()
-    test_y = test_y.flatten()
-    print(pearsonr(test_y,test_pred))
+#     test_y = test_y.flatten()
+    print(f"{name} pearson {sk_pearsonr(test_y, test_pred)}") #TODO: sk_
+       
     print("{}\tTest finished".format(strftime("%y-%m-%d_%H:%M:%S")))
     
 if __name__ == '__main__':
     #import model wrappers to keep them from being garbage collected
-    from util.gensim_wrappers import gensim_vector_models
-    from util import word2gauss_wrapper
-    for d in ["evoc", "usf", "eat"]:
-        main(d)
+    from util.model_wrappers.gensim_wrappers import gensim_vector_models
+    from util.model_wrappers import word2gauss_wrapper
+    #TODO: are these even needed?
+    
+    from word_associations.association_readers.xml_readers import EAT_XML_Reader, USF_XML_Reader, EvocationDataset
+    eat = EAT_XML_Reader("../Data/eat/eat-stimulus-response.xml").get_all_associations()
+    usf = USF_XML_Reader("../Data/usf/cue-target.xml").get_all_associations()
+    evoc = EvocationDataset("../Data/evocation").get_all_associations()
+    evoc = [((wp[0].split(".")[0], wp[1].split(".")[0]), stren) for wp, stren in evoc] #remove synset information
+     
+    for dataset in [("eat", eat), ("usf", usf), ("evoc", evoc)]:
+        main(dataset)

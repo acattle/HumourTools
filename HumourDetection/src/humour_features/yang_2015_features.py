@@ -524,7 +524,7 @@ if __name__ == "__main__":
 #     oneliners_loc = "/mnt/d/datasets/16000 oneliners/Jokes16000.txt"
 #     w2v_loc = "/mnt/c/vectors/GoogleNews-vectors-negative300.bin"
     
-    wilson_lexicon_loc = "subjectivity_clues_hltemnlp05/subjclueslen1-HLTEMNLP05.tff"
+    wilson_lexicon_loc = "D:/datasets/subjectivity_clues_hltemnlp05/subjclueslen1-HLTEMNLP05.tff"
     
     docs_and_labels=[]
     with open(potd_loc, "r") as potd_f:
@@ -539,7 +539,7 @@ if __name__ == "__main__":
     random.seed(10)
     random.shuffle(docs_and_labels)
           
-    from util.common_models import get_google_word2vec
+    from util.model_wrappers.common_models import get_google_word2vec
     test_size = round(len(docs_and_labels)*0.1) #hold out 10% as test
     test_X, test_y = zip(*docs_and_labels[:test_size]) #unzip the documents and labels
     train_X, train_y = zip(*docs_and_labels[test_size:])
@@ -564,29 +564,12 @@ if __name__ == "__main__":
 #      
 # # #     #save the model
 # # #     yang.named_steps["extract_features"]._purge_w2v_model() #smaller pkl
-# # #     from sklearn.externals import joblib
-# # #     joblib.dump(yang, "yang_pipeline_ubuntu.pkl")
-# #     import dill
-# #     with open("yang_pipeline_ubuntu_100minsamples_class.dill", "wb") as yang_f:
-# #         dill.dump(yang, yang_f)
-# # #     with open("yang_pipeline_ubuntu_100minsamples.dill", "rb") as yang_f:
-# # #         yang=dill.load(yang_f)
-# #  
-# # # #     from sklearn.preprocessing.data import StandardScaler
-# # # # #     from sklearn.svm.classes import LinearSVC
-# # # #     from sklearn.linear_model import LogisticRegression
-# # # #     from sklearn.pipeline import Pipeline
-# # # #     dumb_classifier = Pipeline([("count vector", CountVectorizer()),
-# # # # #                                 ("scale", StandardScaler()),
-# # # #                                 ("logistic regression", LogisticRegression())
-# # # #                                 ])
-# # # #     dumb_classifier.fit(X,y)
-# # # #     print('fitted')
-# # # #     with open("bow_lr.dill", "wb") as bow_f:
-# # # #         dill.dump(dumb_classifier, bow_f)
-# # #     with open("bow_lr.dill", "rb") as bow_f:
-# # #         dumb_classifier = dill.load(bow_f)
-#         
+      
+    #save the model
+#     yang.named_steps["extract_features"]._purge_w2v_model() #smaller pkl
+    with open("yang_pipeline_min100.dill", "rb") as yang_f:
+        yang=dill.load(yang_f)
+  
 #         
 #     oneliners = []
 #     with open(oneliners_loc, "r", encoding="latin-1") as oneliners_f:
