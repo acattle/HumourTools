@@ -7,6 +7,7 @@ import subprocess
 from tempfile import TemporaryDirectory
 import os
 import re
+import numpy as np
 
 class KenLMSubprocessWrapper():
     """
@@ -40,6 +41,31 @@ class KenLMSubprocessWrapper():
         self.model_loc = model_Loc
         self.kenlm_query_loc = kenlm_query_loc
         self.tmpdir=tmpdir
+        
+    def _process_query_output(self, query_output_f):
+        """
+            A method for reading KenLM Query outputs and extracting the
+            document-level log probability.
+            
+            Note: KenLM uses log base 10
+            
+            :param query_output_f: the file containing the KenLM Query output to be processed
+            :type query_output_f: file
+            
+            :returns: A list containing the log probabilities extracted from the Query output
+            :rtype: List[float]
+        """
+        
+        total_p=re.compile(r"Total: (-?\d+\.?\d*)")
+        
+        log_probs = []
+        for line in query_output_f:
+            total_match = total_p.search(line)
+            
+            if total_match:
+                log_probs.append(float(total_match.group(1)))
+        
+        return log_probs
 
     def get_log_probabilities(self, documents):
         """
@@ -81,36 +107,11 @@ class KenLMSubprocessWrapper():
                 subprocess.run(query_str, stdin=df, stdout=out_f)
             
             with open(out_loc, "r") as out_f:
-                log_probs = self.process_query_output(out_f)
+                log_probs = self._process_query_output(out_f)
             
-        return log_probs
-        
-    def process_query_output(self, query_output_f):
-        """
-            A method for reading KenLM Query outputs and extracting the
-            document-level log probability.
-            
-            Note: KenLM uses log base 10
-            
-            :param query_output_f: the file containing the KenLM Query output to be processed
-            :type query_output_f: file
-            
-            :returns: A list containing the log probabilities extracted from the Query output
-            :rtype: List[float]
-        """
-        
-        total_p=re.compile(r"Total: (-?\d+\.?\d*)")
-        
-        log_probs = []
-        for line in query_output_f:
-            total_match = total_p.search(line)
-            
-            if total_match:
-                log_probs.append(float(total_match.group(1)))
-        
         return log_probs
     
-    def get_perplexity(self,documents):
+    def get_perplexities(self,documents):
         """
             Calculate the perplexity of multiple documents at the same time.
             
@@ -132,7 +133,7 @@ class KenLMSubprocessWrapper():
             #KenLM uses log base 10. KenLM also appends </s> on the end of documents
             perplexities.append(10 ** -(lp/(len(d) + 1)))
         
-        return perplexities
+        return np.vstack(perplexities) #TODO: needed?
     
 if __name__ == "__main__":
     k = KenLMSubprocessWrapper("/mnt/d/Downloads/brown/brown.bin", "/mnt/d/git/kenlm-stable/build/bin/query", "d:/temp")
@@ -140,7 +141,7 @@ if __name__ == "__main__":
     d=["this is a test .".split(),
        "so is this !".split()]
     
-    print(k.get_perplexity(d))
+    print(k.get_perplexities(d))
 #     km = KenLMModel("/mnt/c/Users/Andrew/Desktop/kenlm models and raw text/wiki_pos_w_punc_4gram_prune.arpa")
 #     km = KenLMModel("/mnt/c/Users/Andrew/Desktop/Senti140/tokens_2.arpa")
 #     
