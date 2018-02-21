@@ -9,8 +9,8 @@
 from __future__ import division #for maintaining Python 2.7 support
 import numpy as np
 from nltk.corpus import cmudict
-from itertools import combinations
 from util.misc import mean
+from util.text_processing import get_word_pairs
 
 def get_interword_score_features(documents, scorer, token_filter=None):
     """
@@ -21,6 +21,9 @@ def get_interword_score_features(documents, scorer, token_filter=None):
         Documents can be filtered using the optional token_filter argument. E.g.
         if token_filter is a function that removes stopwords from a document
         then no stopwords will appear in the word pairs.
+        
+        Note: this function calls scorer for each word pair and thus is not
+        suitable for scorers with large setups/teardowns
         
         :param documents: documents to be processed. Each document should be a sequence of tokens
         :type documents: Iterable[Iterable[str]]
@@ -33,18 +36,14 @@ def get_interword_score_features(documents, scorer, token_filter=None):
         :rtype: numpy.array
     """
     
-    if not token_filter: #if no filter is specified
-        def token_filter(x): return x #just return the entire document
-    
+    documents = get_word_pairs(documents, token_filter)
+
     feature_vectors = []
     for document in documents:
         scores = []
-        document = token_filter(document) #get only the words of interest
-        #TODO: would it be more efficient to do all documents at once?
-        for word1, word2 in combinations(document, 2): #for all interesting word pairs
+        for word1, word2 in document:
             #TODO: ignore OOVs? How? Failing silently on keyerrors?
-            score= scorer(word1, word2)
-            scores.append(score)
+            scores.append(scorer(word1, word2))
         
         max_score = max(scores)
         avg_score = mean(scores)
