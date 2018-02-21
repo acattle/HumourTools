@@ -11,8 +11,9 @@ import logging
 from sklearn.base import TransformerMixin
 from util.wordnet.wordnet_graph import WordNetGraph
 from util.wordnet.wordnet_utils import WordNetUtils
+from util.loggers import LoggerMixin
 
-class HayashiFeatureExtractor(TransformerMixin):
+class HayashiFeatureExtractor(TransformerMixin, LoggerMixin):
     def __init__(self, lda_model=None, w2v_model=None, autoex_model=None, betweenness_loc=None, load_loc=None,  verbose=False):
         """
             Initialize a Word Association Strength feature extractor
@@ -39,7 +40,7 @@ class HayashiFeatureExtractor(TransformerMixin):
         
         #TODO: not global logging
         if verbose:
-            logging.basicConfig(level=logging.DEBUG)
+            self.logger.setLevel(logging.DEBUG)
         
         self.verbose_interval = 1000
     
@@ -75,7 +76,7 @@ class HayashiFeatureExtractor(TransformerMixin):
             
             processed += 1
             if not (processed % self.verbose_interval):
-                logging.debug("{}/{} done".format(processed, total))
+                self.logger.debug("{}/{} done".format(processed, total))
         
         return np.vstack(features)
     
@@ -154,7 +155,7 @@ class HayashiFeatureExtractor(TransformerMixin):
             
             processed += 1
             if not (processed % self.verbose_interval):
-                logging.debug("{}/{} done".format(len(features), total))
+                self.logger.debug("{}/{} done".format(len(features), total))
         
         return np.vstack(features)
     
@@ -163,32 +164,32 @@ class HayashiFeatureExtractor(TransformerMixin):
         
         features = []
         
-        logging.debug("starting lda")
+        self.logger.debug("starting lda")
         features.append(self.get_lda_feats(association_tuples))
-        logging.debug("lda done")
+        self.logger.debug("lda done")
         
-        logging.debug("starting w2v")
+        self.logger.debug("starting w2v")
         features.append(self.get_w2v_feats(association_tuples))
-        logging.debug("w2v done")
+        self.logger.debug("w2v done")
         
-        logging.debug("starting autoex")
+        self.logger.debug("starting autoex")
         features.append(self.get_autoex_feats(association_tuples))
-        logging.debug("autoex done")
+        self.logger.debug("autoex done")
         
-        logging.debug("starting betweenness")
+        self.logger.debug("starting betweenness")
         features.append(self.get_wn_betweenness(association_tuples))
-        logging.debug("betweenness done")
+        self.logger.debug("betweenness done")
         
-        logging.debug("starting load")
+        self.logger.debug("starting load")
         features.append(self.get_wn_load(association_tuples))
-        logging.debug("load done")
+        self.logger.debug("load done")
         
-        logging.debug("starting dirrels")
+        self.logger.debug("starting dirrels")
         features.append(self.get_dir_rel(association_tuples))
-        logging.debug("dirrels done")
+        self.logger.debug("dirrels done")
         
-        logging.debug("starting wordnet feats")
+        self.logger.debug("starting wordnet feats")
         features.append(self.get_wn_feats(association_tuples))
-        logging.debug("wordnet feats done")
+        self.logger.debug("wordnet feats done")
                    
         return np.hstack(features)
