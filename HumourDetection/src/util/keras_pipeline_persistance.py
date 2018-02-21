@@ -27,18 +27,18 @@ from keras.models import load_model
 DEFAULT_MODEL_SUFFIX = "-model.h5"
 DEFAULT_PIPELINE_SUFFIX = "-pipeline.pkl"
 
-def save_keras_pipeline(file_loc, pipeline, estimator_name="estimator", model_file_suffix=DEFAULT_MODEL_SUFFIX, pipeline_file_suffix=DEFAULT_PIPELINE_SUFFIX):
+def save_keras_pipeline(file_loc_and_prefix, pipeline, estimator_name="estimator", model_file_suffix=DEFAULT_MODEL_SUFFIX, pipeline_file_suffix=DEFAULT_PIPELINE_SUFFIX):
     """
         Convenience method that allows for the saving of sklearn pipelines which
         contain KerasClassifier or KerasRegressor. Pipelines can then be
         reloaded using load_keras_pipeline().
         
         Models are saved as two separate files. By default:
-            <file_loc>-model.h5
-            <file_loc>-pipeline.pkl
+            <file_loc_and_prefix>-model.h5
+            <file_loc_and_prefix>-pipeline.pkl
         
-        :param file_loc: the directory and filename prefix to use when saving the pipeline
-        :type file_loc: str
+        :param file_loc_and_prefix: the directory and filename prefix to use when saving the pipeline
+        :type file_loc_and_prefix: str
         :param pipeline: the pipeline to be saved
         :type pipeline: sklearn.pipeline.Pipeline
         :param estimator_name: the name given to the KerasClassifier/KerasRegressor during pipeline construction
@@ -50,17 +50,17 @@ def save_keras_pipeline(file_loc, pipeline, estimator_name="estimator", model_fi
     """
     #save the underlying Keras model
     model = pipeline.named_steps[estimator_name].model
-    model.save("{}{}".format(file_loc, model_file_suffix))
+    model.save(f"{file_loc_and_prefix}{model_file_suffix}")
     
     #remove reference to the actual Keras model so that we can pickle the pipeline
     pipeline.named_steps[estimator_name].model = None
-    joblib.dump(pipeline, "{}{}".format(file_loc, pipeline_file_suffix))
+    joblib.dump(pipeline, f"{file_loc_and_prefix}{pipeline_file_suffix}")
     
     #replace the model so subsequent call to the pipeline don't fail
     #TODO: is this needed?
     pipeline.named_steps[estimator_name].model = model
 
-def load_keras_pipeline(file_loc, estimator_name="estimator", model_file_suffix=DEFAULT_MODEL_SUFFIX, pipeline_file_suffix=DEFAULT_PIPELINE_SUFFIX):
+def load_keras_pipeline(file_loc_and_prefix, estimator_name="estimator", model_file_suffix=DEFAULT_MODEL_SUFFIX, pipeline_file_suffix=DEFAULT_PIPELINE_SUFFIX,custom_objects=None):
     """
         Convenience method that allows for the loading of sklearn pipelines
         which contain KerasClassifier or KerasRegressor and have been saved
@@ -68,24 +68,26 @@ def load_keras_pipeline(file_loc, estimator_name="estimator", model_file_suffix=
         
         Note that save_keras_pipeline() saves models as two files and both files
         must be present. By default these files are:
-            <file_loc>-model.h5
-            <file_loc>-pipeline.pkl
+            <file_loc_and_prefix>-model.h5
+            <file_loc_and_prefix>-pipeline.pkl
         
-        :param file_loc: the directory and filename prefix to use when loading the pipeline
-        :type file_loc: str
+        :param file_loc_and_prefix: the directory and filename prefix to use when loading the pipeline
+        :type file_loc_and_prefix: str
         :param estimator_name: the name given to the KerasClassifier/KerasRegressor during pipeline construction
         :type estimator_name: str
         :param model_file_suffix: The suffix used when saving the Keras model (default = "-model.h5")
         :param model_file_suffix: str
         :param pipeline_file_suffix: The suffix used when saving the pipeline (default = "-pipeline.pkl")
         :param pipeline_file_suffix: str
+        :param custom_objects: dictionary mapping names to custom functions. Needed so Keras can load models saved with custom metrics
+        :type custom_objects: Dict[str, Callable[]]
         
         :returns: the loaded pipeline
         :rtype: sklearn.pipeline.Pipeline
     """
     #load the Keras model and the pipeline seperately
-    model = load_model("{}{}".format(file_loc, model_file_suffix)) 
-    pipeline = joblib.load("{}{}".format(file_loc, pipeline_file_suffix))
+    model = load_model(f"{file_loc_and_prefix}{model_file_suffix}", custom_objects=custom_objects)
+    pipeline = joblib.load(f"{file_loc_and_prefix}{pipeline_file_suffix}")
     
     #replace the model in the pipeline
     pipeline.named_steps[estimator_name].model = model
