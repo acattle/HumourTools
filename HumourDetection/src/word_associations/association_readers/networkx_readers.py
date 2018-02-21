@@ -5,168 +5,96 @@ Created on Jan 27, 2017
 '''
 from __future__ import print_function, division #For Python 2.7 compatibility
 from networkx import read_pajek, shortest_path_length
-from numpy import mean
 from networkx.classes.function import set_edge_attributes
 from networkx.classes.digraph import DiGraph
-from math import log
-import pickle
-from time import strftime
-# from igraph import Graph, OUT
-# import os
-# import glob
-# import re
-# import codecs
-# from nltk.corpus import stopwords
-# from multiprocessing import Pool
-from collections import defaultdict
-from os.path import join
-from networkx.algorithms.centrality.load import load_centrality
-from networkx.algorithms.centrality.betweenness import betweenness_centrality
-import xml.etree.ElementTree as ET
+from math import log10
+from networkx.exception import NetworkXNoPath, NodeNotFound
 
-class EATGraph(object):
+class AssociationNetworkx:
+    
+    def get_all_associations(self):
+        """
+            Return all word pairs and their association strength
+            
+            :returns: An edge view representing all word pairs and their strengths (effectively a list of (stim, resp, weight) tuples)
+            :rtype: networkx.EdgeView
+        """
+        return self.graph.edges(data='weight', default=0)
+    
+    def get_association_strengths(self, word_pairs):
+        """
+            Get association strengths between word_pairs.
+            
+            Association strengths are equal to the maximal path-product between
+            nodes representing the word pairs. I.e. if edge weights represent
+            the probability of moving from U to V, we find the path between
+            U and V which maximizes this probability.
+            
+            :param word_pairs: the word pairs to calculate strengths for
+            :type word_pairs: Iterable[Tuple[str, str]]
+            
+            :returns: the calculated strengths
+            :rtype: List[float]
+        """
+        
+        strengths = []
+        for a, b in word_pairs:
+            strength = 0
+            try:
+                #Finding the shortest path between nodes according to -log weight isequivalent to finding the maximal product path
+                #i.e. the path which maximizes the chain probability
+                strength = 10 ** -(shortest_path_length(self.graph, a.upper(), b.upper(), "-log weight"))
+            except (NodeNotFound, NetworkXNoPath):
+                #either one of the words is out-of-vocabulary
+                #or there is no path between them
+                #Either way, fail silent and default to 0
+                pass
+            
+            strengths.append(strength)
+        
+        return strengths
+
+class EATNetworkx(AssociationNetworkx):
     def __init__(self, eat_pajek_loc):
-        #networkx
         self.graph = read_pajek(eat_pajek_loc)
         self.graph = DiGraph(self.graph) #for some reason pajek defaults to multi
+        
+        
+        #Convert edge weights from count to percentage
         weights_as_proportions = {}
+        #Also calculate the negative log of the percentage for use finding maximal product path
         neg_log_proportions = {}
         for stimuli, response, weight in self.graph.edges(data='weight', default=0):
             s_degree = self.graph.degree(stimuli, weight="weight")
             proportion = float(weight)/s_degree
             weights_as_proportions[(stimuli, response)] = proportion
-            neg_log_proportions[(stimuli, response)] = -log(proportion)
+            neg_log_proportions[(stimuli, response)] = -log10(proportion)
          
         set_edge_attributes(self.graph, weights_as_proportions, "weight")
         set_edge_attributes(self.graph, neg_log_proportions, "-log weight")
-         
-        #igraph
-#         self.graph = Graph.Read_Pajek(eat_pajek_loc)
-#         self.graph.vs["name"] = self.graph.vs["id"]#work around for bug: https://github.com/igraph/python-igraph/issues/86
-#         proportions = []
-#         neg_log_proportions = []
-#         out_degrees = self.graph.strength(self.graph.vs, mode=OUT, weights="weight")
-#         for e in self.graph.es:
-#             proportion = float(e["weight"])/out_degrees[e.source]
-#             proportions.append(proportion)
-#             neg_log_proportions.append(-log(proportion))
-#         
-#         self.graph.es["weight"] = proportions
-#         self.graph.es["-log weight"] = neg_log_proportions
         
-    
-    def get_all_associations(self):
-        return self.graph.edges(data='weight', default=0)
-
-class EAT_XML_Reader():
-    def __init__(self, xml_loc):
-        self.eat_root = ET.parse(xml_loc).getroot()
         
-    def get_all_associations(self):
-        associations=[]
         
-        for stimulus_element in self.eat_root:
-            stimuli = stimulus_element.attrib["word"]
-            total = float(stimulus_element.attrib["all"])
-            
-            for response_element in stimulus_element:
-                response = response_element.attrib["word"]
-                count = float(response_element.attrib["n"])
-                
-                associations.append((stimuli, response, count/total))
         
-        return associations
-
-class USFGraph(object):
+        
+class USFNetworkx(AssociationNetworkx):
     def __init__(self, usf_pajek_loc):
-        #igraph
-#         self.graph = Graph.Read_Pajek(usf_pajek_loc)
-#         self.graph.vs["name"] = self.graph.vs["id"]#work around for bug: https://github.com/igraph/python-igraph/issues/86
-#         neg_log_proportions = []
-#         for e in self.graph.es:
-#         for e in self.graph.edges:
-#             neg_log_proportions.append(-log(e["weight"]))
-#         
-#         self.graph.es["-log weight"] = neg_log_proportions
-
-        #networkx
         self.graph = read_pajek(usf_pajek_loc)
         self.graph = DiGraph(self.graph) #for some reason pajek defaults to multi
+        
+        #calculate the negative log of the percentage for use finding maximal product path
         neg_log_proportions = {}
         for stimuli, response, weight in self.graph.edges(data='weight', default=0):
-            neg_log_proportions[(stimuli, response)] = -log(weight)
+            neg_log_proportions[(stimuli, response)] = -log10(weight)
          
         set_edge_attributes(self.graph, neg_log_proportions, "-log weight")
-    
-    def get_all_associations(self):
-        return self.graph.edges(data='weight', default=0)
-    
-class EvocationDataset(object):
-    def __init__(self, evocation_dir, mt_group="mt_all"):
-        """ Read evocation scores from "controlled" group plus an optional Mechanical Turk group.
-            
-            @param evocation_dir: the directory where the evocation files are stored
-            @type evocation_dir: str
-            @param mt_group: The Mechanical Turk group of judgements to read in addition to the controlled group. Must be one of "mt_all", "mt_most". "mt_some", or None.
-            @type mt_group: str or None
-        """
-        
-        #read in the control data
-        evocation_scores = self._read_scores(evocation_dir, "controlled")
-        
-        #if we're using MT data
-        if mt_group:
-            #add mt judgements
-            evocation_scores = self._read_scores(evocation_dir, mt_group, evocation_scores)
-        
-        #take simple average of scores
-        self.evocation = {}
-        for synset_pair, judgements in evocation_scores.items():
-            if len(synset_pair) != 2:
-                print(synset_pair)
-            self.evocation[synset_pair] = mean(judgements)/100.0 #average judgements and convert to a probability
-                
-    def _read_scores(self, evocation_dir, group="controlled", evocation_scores=defaultdict(list)):
-        """ Convenience method for reading WordNet Evocation files
-            
-            @param evocation_dir: The directory where the evocation files are stored
-            @type evocation_dir: str
-            @param group: The group of judgements to read. Must be one of "controlled", "mt_all", "mt_most", or "mt_some"
-            @type group: str
-            @param evocation_scores: A dictionary containing already counted evocation scores. Used for combining scores from multiple groups. Keys are (first synset, second synset). Values are a list of floats
-            @type evocation_scores: defaultdict(list)
-            
-            @return A dictionary containing evocation scores. Keys are (first synset, second synset). Values are a list of floats
-            @rtype defaultdict(list)
-        """
-        word_pos_loc = join(evocation_dir, "{}.word-pos-sense".format(group))
-        raw_loc = join(evocation_dir, "{}.raw".format(group))
-        with open(word_pos_loc, "r") as word_pos_file, open(raw_loc, "r") as raw_file:
-            for word_pos_line, raw_line in zip(word_pos_file, raw_file):
-                synset1, synset2 = word_pos_line.strip().split(",")
-                scores = [float(score) for score in raw_line.split()]
-            
-                evocation_scores[(synset1, synset2)].extend(scores)
-        
-        return evocation_scores
-    
-    def get_all_associations(self):
-        """ Method for getting all assocation scores
-            
-            @return A list of tuples representing (first synset, second synset, evocation score as a probability)
-            @rtype [(str, str, float)]
-        """
-        associations = []
-        for synset_pair, evocation_score in self.evocation.items():
-            if len(synset_pair) != 2:
-                print(synset_pair)
-            synset1, synset2 = synset_pair
-            associations.append((synset1, synset2, evocation_score))
-                
-        return associations  
 
                                    
 if __name__ == "__main__":
+    import pickle
+    from time import strftime
+#     from networkx.algorithms.centrality.load import load_centrality
+#     from networkx.algorithms.centrality.betweenness import betweenness_centrality
 #     eat_loc = "C:/Users/Andrew/git/HumourDetection/HumourDetection/src/Data/eat/pajek/EATnew2.net"
     eat_loc = "../shortest_paths/EATnew2.net"
 #     usf_loc = "C:/Users/Andrew/git/HumourDetection/HumourDetection/src/Data/PairsFSG2.net"
@@ -325,46 +253,49 @@ if __name__ == "__main__":
     
 #     
 #     try:
+
+    from networkx import all_pairs_dijkstra_path_length
     print("{} loading EAT".format(strftime("%y-%m-%d_%H:%M:%S")))
-    g = EATGraph(eat_loc)
+    g = EATNetworkx(eat_loc)
     
-    load = load_centrality(g.graph, weight="weight")
-    with open("eat_load_weighted.pkl", "wb") as load_file:
-        pickle.dump(load,load_file)
-         
-    betweenness = betweenness_centrality(g.graph, weight="weight")
-    with open("eat_betweenness_weighted.pkl", "wb") as betweenness_file:
-        pickle.dump(betweenness, betweenness_file)
+#     load = load_centrality(g.graph, weight="weight")
+#     with open("eat_load_weighted.pkl", "wb") as load_file:
+#         pickle.dump(load,load_file)
+#          
+#     betweenness = betweenness_centrality(g.graph, weight="weight")
+#     with open("eat_betweenness_weighted.pkl", "wb") as betweenness_file:
+#         pickle.dump(betweenness, betweenness_file)
 #         with open("eat_graph.pkl", "wb") as graph_file:
 #             pickle.dump(g, graph_file)
-#         print("{} starting EAT paths".format(strftime("%y-%m-%d_%H:%M:%S")))
-#         path_matrix = g.graph.shortest_paths(weights="-log weight")
-#         print("{} EAT paths finished".format(strftime("%y-%m-%d_%H:%M:%S")))
-#         with open("eat_path_matrix.pkl", "wb") as matrix_file:
-#             pickle.dump(path_matrix, matrix_file)
+
+    print("{} starting EAT paths".format(strftime("%y-%m-%d_%H:%M:%S")))
+    path_matrix = all_pairs_dijkstra_path_length(g.graph, weights="-log weight")
+    print("{} EAT paths finished".format(strftime("%y-%m-%d_%H:%M:%S")))
+    with open("eat_path_matrix.pkl", "wb") as matrix_file:
+        pickle.dump(path_matrix, matrix_file)
 #     except Exception,e:
 #         print(e)
 #         
 #     try:    
     print("{} loading USF".format(strftime("%y-%m-%d_%H:%M:%S")))
-    g = USFGraph(usf_loc)
+    g = USFNetworkx(usf_loc)
     
-    load = load_centrality(g.graph, weight="weight")
-    with open("usf_load_weighted.pkl", "wb") as load_file:
-        pickle.dump(load,load_file)
-         
-    betweenness = betweenness_centrality(g.graph, weight="weight")
-    with open("usf_betweenness_weighted.pkl", "wb") as betweenness_file:
-        pickle.dump(betweenness, betweenness_file)
-    
-    print("done")
+#     load = load_centrality(g.graph, weight="weight")
+#     with open("usf_load_weighted.pkl", "wb") as load_file:
+#         pickle.dump(load,load_file)
+#          
+#     betweenness = betweenness_centrality(g.graph, weight="weight")
+#     with open("usf_betweenness_weighted.pkl", "wb") as betweenness_file:
+#         pickle.dump(betweenness, betweenness_file)
+#     
+#     print("done")
 #         with open("usf_graph.pkl", "wb") as graph_file:
 #             pickle.dump(g, graph_file)
-#         print("{} starting USF paths".format(strftime("%y-%m-%d_%H:%M:%S")))
-#         path_matrix = g.graph.shortest_paths(weights="-log weight")
-#         print("{} USF paths finished".format(strftime("%y-%m-%d_%H:%M:%S")))
-#         with open("usf_path_matrix.pkl", "wb") as matrix_file:
-#             pickle.dump(path_matrix, matrix_file)
+    print("{} starting USF paths".format(strftime("%y-%m-%d_%H:%M:%S")))
+    path_matrix = all_pairs_dijkstra_path_length(g.graph, weights="-log weight")
+    print("{} USF paths finished".format(strftime("%y-%m-%d_%H:%M:%S")))
+    with open("usf_path_matrix.pkl", "wb") as matrix_file:
+        pickle.dump(path_matrix, matrix_file)
 #     except Exception,e:
 #         print(e  )
 
