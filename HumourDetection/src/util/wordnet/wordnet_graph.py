@@ -7,7 +7,6 @@ from __future__ import print_function #for Python 2.7 compatibility
 from nltk.corpus import wordnet
 import networkx
 import pickle
-from numpy import nan
 
 class WordNetGraph(object):
     def __init__(self, cache=True):
@@ -91,19 +90,15 @@ class WordNetGraph(object):
         return extended_neighbouhood
     
     def get_directional_relativity(self,synsets1, synsets2, radius=3):
-        dir_rel = nan
-        try:          
-            synsets1_neighbours = self._get_extended_neighbours(synsets1, radius)
-            synsets2_neighbours = self._get_extended_neighbours(synsets2, radius)
-                
-            intersection = synsets1_neighbours & synsets2_neighbours
-             
-            if len(synsets1_neighbours) != 0: #check for divide by zero error
-                dir_rel = float(len(intersection))/len(synsets1_neighbours) #assign the actual value
-                
-        except KeyError:
-            #one of the synsets must be None
-            pass
+        dir_rel = 0.0 #default to 0.0
+            
+        synsets1_neighbours = self._get_extended_neighbours(synsets1, radius)
+        synsets2_neighbours = self._get_extended_neighbours(synsets2, radius)
+            
+        intersection = synsets1_neighbours & synsets2_neighbours
+         
+        if len(synsets1_neighbours) != 0: #check for divide by zero error
+            dir_rel = float(len(intersection))/len(synsets1_neighbours) #assign the actual value
         
         return dir_rel
                     
