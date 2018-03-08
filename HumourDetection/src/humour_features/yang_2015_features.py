@@ -10,11 +10,11 @@
 '''
 from __future__ import print_function, division
 import re
-from nltk import pos_tag_sents
-from nltk.corpus import wordnet as wn
+from nltk import pos_tag_sents, word_tokenize, sent_tokenize
+from nltk.corpus import cmudict, wordnet as wn
 import numpy as np
 from math import log
-from itertools import combinations, product
+from itertools import combinations
 from sklearn.base import TransformerMixin
 from sklearn.exceptions import NotFittedError
 from sklearn.feature_extraction.text import CountVectorizer
@@ -23,18 +23,7 @@ from humour_features.utils.common_features import get_alliteration_and_rhyme_fea
     get_interword_score_features
 import logging
 from util.loggers import LoggerMixin
-
-def _convert_pos_to_wordnet(treebank_tag):
-    if treebank_tag.startswith('J'):
-        return wn.ADJ
-    elif treebank_tag.startswith('V'):
-        return wn.VERB
-    elif treebank_tag.startswith('N'):
-        return wn.NOUN
-    elif treebank_tag.startswith('R'):
-        return wn.ADV
-    else:
-        return ''
+from util.wordnet.treebank_to_wordnet import get_wordnet_pos
 
 def train_yang_et_al_2015_pipeline(X, y, w2v_model_getter, wilson_lexicon_loc, k=5, **rf_kwargs):
     """
@@ -67,7 +56,7 @@ def train_yang_et_al_2015_pipeline(X, y, w2v_model_getter, wilson_lexicon_loc, k
     
     return yang_pipeline
 
-def run_yang_et_al_2015_baseline(train, test, w2v_model_getter, wilson_lexicon_loc):
+def run_yang_et_al_2015_baseline(train, test, w2v_model_getter, wilson_lexicon_loc, **rf_kwargs):
     """
         Convenience method for running Yang et al. (2015) humour classification
         experiment on a specified dataset. This is equivalent to running
@@ -80,11 +69,13 @@ def run_yang_et_al_2015_baseline(train, test, w2v_model_getter, wilson_lexicon_l
         :param w2v_model_getter: function for retrieving the Word2Vec model
         :type w2v_model_getter: Callable[[], GensimVectorModel]
         :param wilson_lexicon_loc: location of Wilson et al. (2005) lexicon file
-        :type wilson_lexicon_loc: str  
+        :type wilson_lexicon_loc: str
+        :param rf_kwargs: keyword arguments to be passed to the RandomForestClassifier
+        :type rf_kwargs: Dict[str, Any]
     """
     
     train_X, train_y = train
-    yang_pipeline = train_yang_et_al_2015_pipeline(train_X, train_y, w2v_model_getter, wilson_lexicon_loc, k=5) #Yang et al. (2015) use a K of 5
+    yang_pipeline = train_yang_et_al_2015_pipeline(train_X, train_y, w2v_model_getter, wilson_lexicon_loc, k=5, **rf_kwargs) #Yang et al. (2015) use a K of 5
     
     test_X, test_y = test
     pred_y = yang_pipeline.predict(test_X)
@@ -103,8 +94,9 @@ class YangHumourFeatureExtractor(TransformerMixin, LoggerMixin):
         A class for implementing the features used in Yang et al. (2015) as a
         scikit-learn transformer, suitable for use in scikit-learn pipelines.
     """
+    #TODO: What do they mean by "closest in meaning" for KNN?
     
-    def __init__(self, w2v_model_getter, wilson_lexicon_loc, k=5, verbose=False):
+    def __init__(self, w2v_model_getter, wilson_lexicon_loc, k=5, pretagged=False, verbose=True, cache=True):
         """
             Configure Yang et al. (2015) feature extraction options including
             Word2Vec model and Wilson et al. (2005) subjectivity lexicon
@@ -120,8 +112,12 @@ class YangHumourFeatureExtractor(TransformerMixin, LoggerMixin):
             :type wilson_lexicon_loc: str
             :param k: Specifies the number of KNN labels to extract
             :type k: int
+            :param pretagged: specifies whether documents are pre-POS tagged or not
+            :type pretagged: bool
             :param verbose: whether we should use verbose mode or not
             :type verbose: bool
+            :param cache: whether ambiguity results should be cached
+            :type cache: bool
         """
         self.get_w2v_model = w2v_model_getter
         self.wilson_lexicon_loc = wilson_lexicon_loc
@@ -130,10 +126,26 @@ class YangHumourFeatureExtractor(TransformerMixin, LoggerMixin):
         self.knn_model = None
         self.train_y = None #will be used for KNN features
         self.knn_vectorizer = None #will be used to transform documents into input for self.knn_model
+        self.cmu_dict = cmudict.dict() #if we load this at init, it will save having to load it for each transform call
         
+        self.pretagged = pretagged
+        
+        self._sim_cache = None
+        self._synsets_cache = None
+        if cache:
+            self._sim_cache = {}
+            self._synsets_cache = {}
+        
+        self.verbose_interval = 1000
         if verbose:
             self.logger.setLevel(logging.DEBUG)
-
+    
+    def _purge_cache(self):
+        if self._sim_cache != None:
+            self._sim_cache = {}
+        if self._synsets_cache != None:
+            self._synsets_cache = {}
+    
     def _get_wilson_lexicon(self):
         """
             Method for lazy loading Wilson et al. (2005) lexicon.
@@ -203,55 +215,70 @@ class YangHumourFeatureExtractor(TransformerMixin, LoggerMixin):
             :return: The extracted ambiguity features in the form ndarray(sense_combination, sense_farmost, sense_closest)
             :rtype: numpy.array
         """
-        #TODO: currently I am assuming that each document is 1 sentence. If this isn't True it might affect pos_tag performance
-        _cache = {}# caching results  during batch processing resulted in a 33% speedup on Pun of the Day dataset
         
-        #nltk's pos_tag and pos_tag_sents both load a POS tagger from pickle.
-        #Therefore, POS tagging all documents at once reduces disk i/o; faster
-        pos_tagged_documents = pos_tag_sents(documents)
+        pos_tagged_documents = documents #assume documents are POS tagged
+        if not self.pretagged: #if documents haven't be POS tagged yat
+            #TODO: currently I am assuming that each document is 1 sentence. If this isn't True it might affect pos_tag performance
+            #nltk's pos_tag and pos_tag_sents both load a POS tagger from pickle.
+            #Therefore, POS tagging all documents at once reduces disk i/o; faster
+            pos_tagged_documents = pos_tag_sents(documents)
         
         feature_vectors = []
+        processed=0
+        total = len(pos_tagged_documents)
         for pos_tagged_document in pos_tagged_documents:
-            word_senses = []
+            word_senses = set()
             sense_product = 1 #the running product of the number of word senses
-            for token, pos in pos_tagged_document:
-                wn_pos = _convert_pos_to_wordnet(pos) # returns anrsv or empty string
-                senses = wn.synsets(token, wn_pos)  #using empty string as pos makes this function return an empty set
-                
-                if len(senses) > 0: #this avoids log(0) later
-                    sense_product = sense_product * len(senses)
-                    word_senses.append(senses)
-             
-            sense_combination = log(sense_product)
-             
             sense_farmost = 1 #the least similar pair of senses
             sense_closest = 0 #the most similar pair of senses
-            #Yang et al. (2015) defines "sense farmost" as "the largest path similarity" but that doesn't make sense.
-            #They must have mixed up the definitions for farmost and closest
-             
-            #TODO: It's ambiguous in Yang et al. (2015) as to if we should include intra-word sense combinations
-            #Or, conversely, if we should only examine intra-word sense combinations
-            #we currently do neither, only looking at inter-word similarities
-            for word1_senses, word2_senses in combinations(word_senses, 2): #for each word pair
-                for sense_pair in product(word1_senses, word2_senses): #for each synset pair
-                    _cache_key = tuple(sorted(sense_pair)) #sort to force consistent ordering. tuple to make it hashable
-                    #path_similarity is symmetric so reordering the synsets is OK
-                    
-                    path_sim=None
-                    if _cache_key in _cache:
-                        path_sim = _cache[_cache_key]
+            for token, pos in pos_tagged_document:
+                wn_pos = get_wordnet_pos(pos) # returns anrsv or empty string
+                
+                if wn_pos: #no use doing any of this unless we have a valid POS
+                    senses=[]
+                    _cache_key = (token, wn_pos)
+                    if self._synsets_cache and (_cache_key in self._synsets_cache):
+                        senses = self._synsets_cache[_cache_key]
                     else:
-                        path_sim = wn.path_similarity(*sense_pair)
-                        _cache[_cache_key] = path_sim
-                     
-                    if path_sim != None: #if  we have a path similarity
-                        #TODO: is this what Yang did?
-                        sense_farmost = min(sense_farmost, path_sim)
-                        sense_closest = max(sense_closest, path_sim)
+                        senses = wn.synsets(token, wn_pos)  #using empty string as pos makes this function return an empty set
+                        
+                        if self._synsets_cache != None:
+                            self._synsets_cache[_cache_key] = senses
+                    
+                    if senses: #this avoids log(0) later
+                        sense_product *= len(senses)
+                        
+                        for s1 in senses:
+                            if s1 not in word_senses: #avoid duplicating work
+                                #TODO: does this help?
+                                for s2 in word_senses:
+                                    s1_name = s1.name()
+                                    s2_name = s2.name()
+                                    _cache_key = (s1_name, s2_name) if s1_name < s2_name else (s2_name, s1_name)
+                                    #ensure sorted order since path_sim is symmetrical. tuple to make it hashable. Quicker than using a sort function
+                                    
+                                    #path_similarity is symmetric so reordering the synsets is OK
+                                    path_sim=None
+                                    if self._sim_cache and (_cache_key in self._sim_cache):
+                                        path_sim = self._sim_cache[_cache_key]
+                                    else:
+                                        path_sim = wn.path_similarity(s1,s2)
+                                        if self._sim_cache != None:
+                                            self._sim_cache[_cache_key] = path_sim
+                                     
+                                    if path_sim != None: #if  we have a path similarity
+                                        #TODO: is this what Yang did?
+                                        #this is quicker than max() and min(), respectively
+                                        sense_farmost = sense_farmost if sense_farmost > path_sim else path_sim
+                                        sense_closest = sense_closest if sense_closest < path_sim else path_sim
+                        
+                        word_senses.update(senses)
+             
+            sense_combination = log(sense_product)
             feature_vectors.append((sense_combination, sense_farmost, sense_closest))
-#             processed+=1
-#             if processed%1000==0:
-#                 print("{}/{}".format(processed, total))
+            processed+=1
+            if processed%self.verbose_interval==0:
+                self.logger.debug(f"{processed}/{total}")
         
         return np.vstack(feature_vectors)
         
@@ -302,7 +329,7 @@ class YangHumourFeatureExtractor(TransformerMixin, LoggerMixin):
         """
         
         #add all 4 features from get_alliteration_and_rhyme_features()
-        return get_alliteration_and_rhyme_features(documents)
+        return get_alliteration_and_rhyme_features(documents, self.cmu_dict)
         
     def get_average_w2v(self,documents):
         """
@@ -396,39 +423,44 @@ class YangHumourFeatureExtractor(TransformerMixin, LoggerMixin):
             :return: highest performing Yang et al. (2015) features as a numpy array
             :rtype: numpy.array
         """
+        
+        X_tokens = X #assume X is just tokens
+        if self.pretagged: #if X is tokens with POS labels
+            X_tokens = [[token for token, pos in document] for document in X] #get just the tokens
+        
         features = []
         
         self.logger.debug("Starting ambiguity features")
         features.append(self.get_ambiguity_features(X))
         self.logger.debug("Starting interpersonal features")
-        features.append(self.get_interpersonal_features(X))
+        features.append(self.get_interpersonal_features(X_tokens))
         self.logger.debug("Starting phonetic features")
-        features.append(self.get_phonetic_features(X))
+        features.append(self.get_phonetic_features(X_tokens))
         self.logger.debug("Starting KNN features")
-        features.append(self.get_knn_features(X))
-         
+        features.append(self.get_knn_features(X_tokens))
+          
         #extract Word2Vec features
         self.logger.debug("Starting average w2v")
-        features.append(self.get_average_w2v(X))
+        features.append(self.get_average_w2v(X_tokens))
         self.logger.debug("Starting incongruity features")
-        features.append(self.get_incongruity_features(X))
+        features.append(self.get_incongruity_features(X_tokens))
         
         self.logger.debug("All features extracted")
         return np.hstack(features)
 
-class YangHumourAnchorExtractor:
+class YangHumourAnchorExtractor(LoggerMixin):
     """
         A class for implementing Yang et al. (2015) as a scikit-learn
         transformer, suitable for use in scikit-learn pipelines.
     """
     
-    def __init__(self,parser,humour_scorer, t=3, s=2, pos_class=1):
+    def __init__(self,parser,humour_scorer, t=3, s=2, pos_class=1, verbose=True):
         """
             Specify parser and humour_scorer for use in Humour Anchor
             Extraction.
             
-            :param parser: Parser function. Must take  a list of strings and return an nltk.Tree using Penn Treebank tags
-            :type parser: Callable[[Iterable[str]], nltk.Tree]
+            :param parser: Parser function. Must take  a list of documents (one string per document) and return a list of nltk.Tree objects using Penn Treebank tags
+            :type parser: Callable[[Iterable[str]], Iterable[nltk.Tree]]
             :param humour_scorer: pipeline for scoring humour. Must take bag-of-words as input
             :type humour_scorer: sklearn.pipeline.Pipeline
             :param t: the maximum number of humour anchors
@@ -440,84 +472,189 @@ class YangHumourAnchorExtractor:
         """
         #TODO: instead of List[str] should we use just str?
         
-        self.parse = parser
+        self.raw_parse_sents = parser
         self.humour_scorer = humour_scorer
+        self.humour_scorer.named_steps["extract_features"].pretagged=True #TODO: more transparent
         self.t = t
         self.s = s
         self.pos_class = pos_class
+        
+        self.logInterval = 1000
+        if verbose:
+            self.logger.setLevel(logging.DEBUG)
     
-    def get_anchor_candidates(self, document):
+    def get_anchor_candidates(self, doc_parses):
         """
             Generate all candidate humour anchors according to method defined
             in Yang et al. (2015)
             
-            :param document: document to be processed as a sequence of tokens
-            :type document: List[str]
+            :param doc_parses: documents to be processed as a sequence nltk.Tree objects
+            :type doc_parses: List[List[nltk.Tree]]
             
             :return: list of candidate humour anchors
             :rtype: List[List[str]]
         """
+        doc_candidates = []
         
-        parse = self.parse(document)
-
-        #add all NP, VP, ADJP, or AVBP that are "minimal parse subtrees". I think this means doesn't contain and phrases, just terminals
-        candidates = set()
-        for subtree in parse.subtrees(lambda t: t.height() == 3):
-            #height==3 because according to nltk.Tree docs: "height of a tree containing only leaves is 2"
-            #we want one layer about that.
-            if subtree.label() in ["NP", "VP", "ADJP", "ADVP"]:
+        for doc_parse in doc_parses:
+            candidates = set()
+            for sent_parse in doc_parse:
+        
+                #add all NP, VP, ADJP, or AVBP that are "minimal parse subtrees". I think this means doesn't contain and phrases, just terminals
+                for subtree in sent_parse.subtrees(lambda t: t.height() == 3):
+                    #height==3 because according to nltk.Tree docs: "height of a tree containing only leaves is 2"
+                    #we want one layer about that.
+                    if subtree.label() in ["NP", "VP", "ADJP", "ADVP"]:
+                        
+                        filtered_words = tuple([word.lower() for word, pos in subtree.pos() if pos not in ["DT", "PRP", ",", ":", "."]]) #TODO: filter stop words too?
+                        if filtered_words:
+                            candidates.add(filtered_words) #add ordered tuple of leaves
+                        #TODO: do we really want to ignore determiners?
+                        #TODO: filter out determiners and other POSes?
+                    
+                #add remaining nouns and verbs
+                for word, pos in sent_parse.pos():
+                    if pos.startswith("NN") or pos.startswith("VB"):
+                        if ((not pos.startswith("PRP")) and #ignore personal pronouns #TODO: Is this needed? I originally confused PRP for NNP
+                                all(word not in candidate for candidate in candidates)): #if the word is not part of any existing candidate
+                            candidates.add((word.lower(),))
+                            #TODO: checking if we're looking at the same subtree?
                 
-                filtered_words = tuple([word.lower() for word, pos in subtree.pos() if pos not in ["DT", "PRP", ",", ":", "."]])
-                if filtered_words:
-                    candidates.add(filtered_words) #add ordered tuple of leaves
-                #TODO: do we really want to ignore determiners?
-                #TODO: filter out determiners and other POSes?
-            
-        #add remaining nouns and verbs
-        for word, pos in parse.pos():
-            if pos.startswith("NN") or pos.startswith("VB"):
-                if ((not pos.startswith("PRP")) and #ignore personal pronouns #TODO: Is this needed? I originally confused PRP for NNP
-                        all(word not in candidate for candidate in candidates)): #if the word is not part of any existing candidate
-                    candidates.add((re.sub("\W", "", word.lower()),))
-                    #TODO: checking if we're looking at the same subtree?
+            doc_candidates.append(candidates)
         
-        return candidates
+        return doc_candidates
     
-    def find_humour_anchors(self, document):
-        candidates = self.get_anchor_candidates(document)
+    def find_humour_anchors(self, documents):
+        """
+        Find humour anchors for each document
         
-        #TODO: better, more transparent implementation
-        from nltk.tokenize import word_tokenize
-        document = word_tokenize(document)
+        :param documents: documents to process as list of tokens
+        :type documents: List[List[str]]
         
-        documents_minus_subsets = [document] #we want to make sure we get a baseline humour score
-        anchors = []
-        for i in range(self.s, self.t+1):
-            for anchor_comb in combinations(candidates, i):
-                #for all combinations of anchors <= t (including the empty set)
-                anchors.append(anchor_comb)
-                words_to_remove = set(word for anchor in anchor_comb for word in anchor) #flatten candidates
-                documents_minus_subsets.append([word for word in document if word not in words_to_remove]) #remove words from document
+        :returns: extracted humour anchors
+        :rtype: List[List[str]]
+        """
+        
+        docs_to_parse = []
+        doc_indexes = [] #used for mapping each parse to it's original document
+        for doc_num, doc in enumerate(documents):
+            #documents are lists of tokens
+            #If a document contains multiple sentences, it might not parse properly
+            #sent_tokenize only works on strings, not lists of tokens
+            #so just add spaces between the tokens and let the parser retokenize everything
+            for sent in sent_tokenize(" ".join(doc)):
+                docs_to_parse.append(sent)
+                doc_indexes.append(doc_num)
+         
+        parses = self.raw_parse_sents(docs_to_parse)
+        self.logger.debug("parsing done")
+         
+        parsed_docs = [[] for i in range(len(documents))] #initialize an empty list for each document
+        for i, parse in zip(doc_indexes, parses):
+            parsed_docs[i].append(next(parse)) #just take the first parse
+         
+         
+        doc_candidates = self.get_anchor_candidates(parsed_docs)
+        self.logger.debug("got candidates")
+        
+#         with open("oneliner candidates.pkl", "wb") as f:
+#             pickle.dump(doc_candidates, f)
+#         with open("oneliner candidates.pkl", "rb") as f:
+#             doc_candidates = pickle.load(f)
+        
+        docs_to_score = []
+        doc_baseline_indexes = []
+        doc_anchors = []
+        doc_humour_anchors = []
+        total = len(doc_candidates)
+        for doc_num, (candidates, doc_parse) in enumerate(zip(doc_candidates, parsed_docs)):
+            doc = [tok_pos for sent in doc_parse for tok_pos in sent.pos()] #flatten the doc
+            
+            doc_baseline_indexes.append(len(docs_to_score)) #get the index of this doc's baseline score
+            docs_to_score.append(doc) #we want to make sure we get a baseline humour score
+            anchors = []
+            for i in range(self.s, self.t+1):
+                for anchor_comb in combinations(candidates, i):
+                    #for all combinations of anchors <= t (including the empty set)
+                    anchors.append(anchor_comb)
+                    words_to_remove = set(word for anchor in anchor_comb for word in anchor) #flatten candidates
+                    docs_to_score.append([(tok, pos) for tok, pos in doc if tok not in words_to_remove]) #remove words from document
+            
+            doc_anchors.append(anchors)
+                    
+    #         import sys;sys.path.append(r'/mnt/c/Users/Andrew/.p2/pool/plugins/org.python.pydev_6.2.0.201711281614/pysrc')
+    #         import pydevd;pydevd.settrace(stdoutToServer=True, stderrToServer=True)
+        
+            #TODO: shift left
+            humour_scores = self.humour_scorer.predict_log_proba(docs_to_score)
+            
+            
+            #get only the positive label column
+            pos_index = np.where(self.humour_scorer.classes_ == self.pos_class)[0][0] #get the positive column index
+            humour_scores = humour_scores[:,pos_index] #all rows, only the positive column
+            
+            
+#             for baseline_index, anchors in zip(doc_baseline_indexes, doc_anchors):
+            humour_anchors = [tok for tok, pos in docs_to_score[0]] #TODO: #baseline_index]] #assume all words are humour anchors
+            
+            num_anchors = len(anchors)
+            if num_anchors > 0: #if we have at least 1 valid humour anchor candidate combination
+                baseline_score = humour_scores[0] #TODO:baseline_index] #get score for document with no anchors removed
+                decrements =  baseline_score - humour_scores[(0+1) : ((0+1) + num_anchors)] #TODO: 0s to baseline_index
+                max_decrement_arg = np.argmax(decrements)#find the index with the highest value
                 
-#         import sys;sys.path.append(r'/mnt/c/Users/Andrew/.p2/pool/plugins/org.python.pydev_6.2.0.201711281614/pysrc')
-#         import pydevd;pydevd.settrace(stdoutToServer=True, stderrToServer=True)
-        humour_probs = self.humour_scorer.predict_log_proba(documents_minus_subsets)
-          
-        #get only the positive label column
-        pos_index = np.where(self.humour_scorer.classes_ == self.pos_class)[0][0] #get the positive column index
-        humour_probs = humour_probs[:,pos_index] #all rows, only the positive column
-        
-        baseline_score = humour_probs[0] #get score for document with no anchors removed
-        decrements =  baseline_score - humour_probs[1:]
-        max_decrement_arg = np.argmax(decrements)#find the index with the highest value
-        
-        return anchors[max_decrement_arg]
-
-    #TODO: What do they mean by "closest in meaning" for KNN?
+                humour_anchors =  anchors[max_decrement_arg]
+            
+            doc_humour_anchors.append(humour_anchors)
+            docs_to_score = [] #TODO: remove
+            
+            processed = doc_num + 1
+            if processed%self.logInterval == 0:
+                self.logger.debug(f"{processed}/{total}")
+#             print(humour_anchors)
+    
+        return doc_humour_anchors
     
 if __name__ == "__main__":
-    potd_loc = "D:/datasets/pun of the day/puns_pos_neg_data.csv"
-    oneliners_loc = "D:/datasets/16000 oneliners/Jokes16000.txt"
+    from nltk.parse.stanford import StanfordParser
+#     parser = StanfordParser()
+    from string import punctuation
+    potd_pos = "D:/datasets/pun of the day/puns_of_day.csv" #puns_pos_neg_data.csv
+    potd_neg = "D:/datasets/pun of the day/new_select.txt"
+    proverbs = "D:/datasets/pun of the day/proverbs.txt"
+    oneliners_pos = "D:/datasets/16000 oneliners/Jokes16000.txt"
+    oneliners_neg = "D:/datasets/16000 oneliners/MIX16000.txt"
+    
+    docs_and_labels=[]
+    with open(potd_pos, "r") as pos_f:
+        pos_f.readline() #pop the header
+                 
+        for line in pos_f:
+            label, doc = line.split(",", maxsplit=1) #some document conatin commas
+            doc=doc.strip()[1:-1] #cut off quotation marks
+            docs_and_labels.append((doc, 1)) #the labels in this file are incorrect. All are postive
+    with open(potd_neg, "r") as neg_f:
+        for line in neg_f:
+            docs_and_labels.append((line.strip(), -1))
+    with open(proverbs, "r") as neg_f:
+        p = punc_re = re.compile(f'[{re.escape(punctuation)}]')
+        for line in neg_f:
+            line=line.strip().lower()
+            if len(p.sub(" ", line).split()) >5:
+                docs_and_labels.append((line.strip(), -1))
+                #TODO: a couple documents are surrounded by quotes. Selectively remove them?
+    
+    oneliner_docs_and_labels = []
+    with open(oneliners_pos, "r", encoding="ansi") as ol_pos_f:
+        for line in ol_pos_f:
+            oneliner_docs_and_labels.append((line.strip(),1))
+    with open(oneliners_neg, "r", encoding="ansi") as ol_neg_f:
+        for line in ol_neg_f:
+            oneliner_docs_and_labels.append((line.strip(),-1))
+#             parser.raw_parse_sents([line.strip()])
+    
+    
+    
 #     w2v_loc = "C:/vectors/GoogleNews-vectors-negative300.bin"
     
 #     potd_loc = "/mnt/d/datasets/pun of the day/puns_pos_neg_data.csv"
@@ -526,24 +663,16 @@ if __name__ == "__main__":
     
     wilson_lexicon_loc = "D:/datasets/subjectivity_clues_hltemnlp05/subjclueslen1-HLTEMNLP05.tff"
     
-    docs_and_labels=[]
-    with open(potd_loc, "r") as potd_f:
-        potd_f.readline() #pop the header
-              
-        for line in potd_f:
-            label, doc = line.split(",")
-            docs_and_labels.append((doc.split(), int(label)))
-            #potd is pre-tokenized
-          
+            
     import random
     random.seed(10)
     random.shuffle(docs_and_labels)
           
     from util.model_wrappers.common_models import get_google_word2vec
-    test_size = round(len(docs_and_labels)*0.1) #hold out 10% as test
-    test_X, test_y = zip(*docs_and_labels[:test_size]) #unzip the documents and labels
-    train_X, train_y = zip(*docs_and_labels[test_size:])
-    run_yang_et_al_2015_baseline((train_X, train_y), (test_X, test_y), get_google_word2vec, wilson_lexicon_loc)
+#     test_size = round(len(docs_and_labels)*0.1) #hold out 10% as test
+#     test_X, test_y = zip(*docs_and_labels[:test_size]) #unzip the documents and labels
+#     train_X, train_y = zip(*docs_and_labels[test_size:])
+#     yang = train_yang_et_al_2015_pipeline((train_X, train_y), (test_X, test_y), get_google_word2vec, wilson_lexicon_loc)
           
           
 #     yang = YangHumourFeatureExtractor(w2v_loc,wilson_lexicon_loc)
@@ -554,56 +683,118 @@ if __name__ == "__main__":
 #     print("main thread only + caching: {} seconds".format(t))
 #     print(timeit.timeit("YangHumourFeatureExtractor(None,None,n_jobs=1).get_ambiguity_features_pool(train_X)", "from __main__ import YangHumourFeatureExtractor, train_X",number=1))
 #     print(timeit.timeit("YangHumourFeatureExtractor(None,None).get_ambiguity_features_filtered(train_X,False)", "from __main__ import YangHumourFeatureExtractor, train_X",number=1))
-          
+           
 #     print(timeit.timeit("run_yang_et_al_2015_baseline((train_X, train_y), (test_X, test_y), w2v_loc, wilson_lexicon_loc,n_jobs=4)", "from __main__ import run_yang_et_al_2015_baseline,train_X,train_y,test_X,test_y,w2v_loc,wilson_lexicon_loc",number=1))
-      
+       
 #     X,y = zip(*docs_and_labels)
+#     from util.text_processing import default_preprocessing_and_tokenization
+#     X = default_preprocessing_and_tokenization(X, stopwords=[])
 #     print("starting training")
 #     yang = train_yang_et_al_2015_pipeline(X, y, get_google_word2vec, wilson_lexicon_loc, n_estimators=100, min_samples_leaf=100, n_jobs=-1)
 #     print("training complete\n\n")
-#      
-# # #     #save the model
-# # #     yang.named_steps["extract_features"]._purge_w2v_model() #smaller pkl
-      
-    #save the model
-#     yang.named_steps["extract_features"]._purge_w2v_model() #smaller pkl
-    with open("yang_pipeline_min100.dill", "rb") as yang_f:
-        yang=dill.load(yang_f)
-  
+#     yang.named_steps["extract_features"]._purge_cache()
+#       
+# #     from timeit import timeit
+# #     timeit("train_yang_et_al_2015_pipeline(X, y, get_google_word2vec, wilson_lexicon_loc, n_estimators=100, min_samples_leaf=100, n_jobs=-1)", "from __main__ import *\nfrom __main__ import _convert_pos_to_wordnet", number=1)
 #         
+#     #save the model
+# #     yang.named_steps["extract_features"]._purge_w2v_model() #smaller pkl
+# #     from sklearn.externals import joblib
+# #     joblib.dump(yang, "yang_pipeline_min100.pkl")
+#     import dill
+#     with open("yang_pipeline_potd.dill", "wb") as yang_f:
+#         dill.dump(yang, yang_f)
+#        
+#        
+#     docs_and_labels = oneliner_docs_and_labels
+#     random.seed(10)
+#     random.shuffle(docs_and_labels)
+#     X,y = zip(*docs_and_labels)
+#     X = default_preprocessing_and_tokenization(X, stopwords=[])
+#     print("starting training")
+#     yang = train_yang_et_al_2015_pipeline(X, y, get_google_word2vec, wilson_lexicon_loc, n_estimators=100, min_samples_leaf=100, n_jobs=-1)
+#     print("training complete\n\n")
+#     yang.named_steps["extract_features"]._purge_cache()
+#     with open("yang_pipeline_ol.dill", "wb") as yang_f:
+#         dill.dump(yang, yang_f)
+    
+    import dill
+    with open("yang_pipeline_potd.dill", "rb") as yang_f:
+        yang=dill.load(yang_f)
+     
+# #     from sklearn.preprocessing.data import StandardScaler
+# # #     from sklearn.svm.classes import LinearSVC
+# #     from sklearn.linear_model import LogisticRegression
+# #     from sklearn.pipeline import Pipeline
+# #     dumb_classifier = Pipeline([("count vector", CountVectorizer()),
+# # #                                 ("scale", StandardScaler()),
+# #                                 ("logistic regression", LogisticRegression())
+# #                                 ])
+# #     dumb_classifier.fit(X,y)
+# #     print('fitted')
+# #     with open("bow_lr.dill", "wb") as bow_f:
+# #         dill.dump(dumb_classifier, bow_f)
+#     with open("bow_lr.dill", "rb") as bow_f:
+#         dumb_classifier = dill.load(bow_f)
+            
+            
 #     oneliners = []
-#     with open(oneliners_loc, "r", encoding="latin-1") as oneliners_f:
+#     with open(oneliners_pos, "r") as oneliners_f:
 #         for line in oneliners_f:
 # #             words = nltk.word_tokenize(line.lower())
 # #             words = [w for w in words if w.isalpha()]
-#               
-#             oneliners.append(line.strip())
-#             if len(oneliners) >= 10:
+#                 
+#             oneliners.append(line)
+#             if len(oneliners) >= 50:
 #                 break
-#     
-# #     class StatParserWrapper():
-# #         def __init__(self,parser):
-# #             self.parser=parser
-# #         
-# #         def parse(self, document):
-# #             return self.parser.parse(" ".join(document))
-# 
-# #     from stat_parser import Parser
+         
+#     class StatParserWrapper():
+#         def __init__(self,parser):
+#             self.parser=parser
+#         
+#         def parse(self, document):
+#             return self.parser.parse(" ".join(document))
+     
+#     from stat_parser import Parser
 #     from parser.bllip_wrapper import BllipParser
 #     bllip = BllipParser()
-# 
-#     
-#     anchor_extractor = YangHumourAnchorExtractor(bllip.parse, yang, 3)
-# #     count = 0
-#     for oneliner in oneliners:
-# #         if label==1:
+#     from nltk.parse.stanford import StanfordParser
+    parser = StanfordParser()
+     
+         
+    anchor_extractor = YangHumourAnchorExtractor(parser.raw_parse_sents, yang, 3)
+  
+    import pickle
+# #     with open("oneliners.pkl", "wb") as f:
+# #         pickle.dump(oneliner_docs_and_labels, f)
+#     with open("oneliners.pkl", "rb") as f:
+#         oneliner_docs_and_labels = pickle.load(f)
+#     docs, labels = zip(*oneliner_docs_and_labels)
+      
+    docs, labels = zip(*docs_and_labels)
+    with open("potd_raw.pkl", "wb") as f:
+        pickle.dump(docs_and_labels, f)
+      
+    docs = [word_tokenize(doc.lower()) for doc in docs]
+#     parses = parser.parse_raw_sents(docs)
+#     print(parses)
+      
+    anchors= anchor_extractor.find_humour_anchors(docs)
+#     count = 0
+#     total = len(oneliner_docs_and_labels)
+#     anchor_map = {}
+#     for oneliner, label in oneliner_docs_and_labels:
 #         anchors= anchor_extractor.find_humour_anchors(oneliner)
+#         anchor_map[oneliner] = anchors
+#                     print(oneliner)
+#                     print(anchors)
+#                     print("\n")
+#         count+=1
+# #         if count%50 == 0:
+#         print(f"{count}/{total}")
 #         print(oneliner)
-#         print(anchors)
-#         print("\n")
-# #         count+=1
-# #         if count >9:
-# #             break
-#     
-#     
-    
+#     print(anchors)
+#     print()
+       
+    with open("potd_anchors.pkl", "wb") as f:
+        pickle.dump(anchors, f)

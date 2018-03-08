@@ -45,9 +45,13 @@ def get_interword_score_features(documents, scorer, token_filter=None):
             #TODO: ignore OOVs? How? Failing silently on keyerrors?
             scores.append(scorer(word1, word2))
         
-        max_score = max(scores)
-        avg_score = mean(scores)
-        min_score = min(scores)
+        max_score = 0
+        avg_score = 0
+        min_score = 0
+        if len(scores) > 0:
+            max_score = max(scores)
+            avg_score = mean(scores)
+            min_score = min(scores)
         
         feature_vectors.append((min_score, avg_score, max_score))
     
@@ -89,6 +93,7 @@ def get_alliteration_and_rhyme_features(documents, cmu_dict=None):
                 for pronunciation in pronunciations:
                     #Since there's no easy way to identify with pronunciation is the correct one
                     #It's just easier to not worry about it and double count all possible first phonemes and end rhymes
+                    #TODO: but doesn't this lead to double counting?
                     
                     first_phonemes.add(pronunciation[0])
                     
@@ -110,7 +115,7 @@ def get_alliteration_and_rhyme_features(documents, cmu_dict=None):
                     rhyme_chains[end_rhyme] = rhyme_chains.get(end_rhyme, 0) + 1
                     
         #trim chains of length 1
-        alliteration_chains = {phoneme:count for phoneme, count in alliteration_chains.items() if count > 1}
+        alliteration_chains = {phoneme:count for phoneme, count in alliteration_chains.items() if count > 1} #TODO: any reason not to make a list of just counts?
         rhyme_chains = {rhyme:count for rhyme, count in rhyme_chains.items() if count > 1}
         
         alliteration_num = len(alliteration_chains) #number of chains
