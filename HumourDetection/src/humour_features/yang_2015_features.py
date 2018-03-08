@@ -358,7 +358,8 @@ class YangHumourFeatureExtractor(TransformerMixin, LoggerMixin):
             for word in document:
                 sum_vector = sum_vector + self.get_w2v_model().get_vector(word)
             
-            averaged_w2vs.append(sum_vector / len(document))
+            avg_vector = sum_vector / len(document) if document else np.zeros(self.get_w2v_model().get_dimensions())
+            averaged_w2vs.append(avg_vector)
         
         return np.vstack(averaged_w2vs)
     
@@ -688,15 +689,15 @@ if __name__ == "__main__":
        
 #     X,y = zip(*docs_and_labels)
 #     from util.text_processing import default_preprocessing_and_tokenization
-#     X = default_preprocessing_and_tokenization(X, stopwords=[])
+#     X = default_preprocessing_and_tokenization(X, stopwords=[], flatten_sents=False)
 #     print("starting training")
-#     yang = train_yang_et_al_2015_pipeline(X, y, get_google_word2vec, wilson_lexicon_loc, n_estimators=100, min_samples_leaf=100, n_jobs=-1)
+#     yang = train_yang_et_al_2015_pipeline(X, y, get_google_word2vec, wilson_lexicon_loc, n_estimators=100, min_samples_leaf=100, n_jobs=1)
 #     print("training complete\n\n")
 #     yang.named_steps["extract_features"]._purge_cache()
-#       
+#         
 # #     from timeit import timeit
 # #     timeit("train_yang_et_al_2015_pipeline(X, y, get_google_word2vec, wilson_lexicon_loc, n_estimators=100, min_samples_leaf=100, n_jobs=-1)", "from __main__ import *\nfrom __main__ import _convert_pos_to_wordnet", number=1)
-#         
+#           
 #     #save the model
 # #     yang.named_steps["extract_features"]._purge_w2v_model() #smaller pkl
 # #     from sklearn.externals import joblib
@@ -704,15 +705,15 @@ if __name__ == "__main__":
 #     import dill
 #     with open("yang_pipeline_potd.dill", "wb") as yang_f:
 #         dill.dump(yang, yang_f)
-#        
-#        
+#          
+#          
 #     docs_and_labels = oneliner_docs_and_labels
 #     random.seed(10)
 #     random.shuffle(docs_and_labels)
 #     X,y = zip(*docs_and_labels)
-#     X = default_preprocessing_and_tokenization(X, stopwords=[])
+#     X = default_preprocessing_and_tokenization(X, stopwords=[], flatten_sents=False)
 #     print("starting training")
-#     yang = train_yang_et_al_2015_pipeline(X, y, get_google_word2vec, wilson_lexicon_loc, n_estimators=100, min_samples_leaf=100, n_jobs=-1)
+#     yang = train_yang_et_al_2015_pipeline(X, y, get_google_word2vec, wilson_lexicon_loc, n_estimators=100, min_samples_leaf=100, n_jobs=1)
 #     print("training complete\n\n")
 #     yang.named_steps["extract_features"]._purge_cache()
 #     with open("yang_pipeline_ol.dill", "wb") as yang_f:
@@ -721,7 +722,7 @@ if __name__ == "__main__":
     import dill
     with open("yang_pipeline_potd.dill", "rb") as yang_f:
         yang=dill.load(yang_f)
-     
+      
 # #     from sklearn.preprocessing.data import StandardScaler
 # # #     from sklearn.svm.classes import LinearSVC
 # #     from sklearn.linear_model import LogisticRegression
@@ -736,8 +737,8 @@ if __name__ == "__main__":
 # #         dill.dump(dumb_classifier, bow_f)
 #     with open("bow_lr.dill", "rb") as bow_f:
 #         dumb_classifier = dill.load(bow_f)
-            
-            
+             
+             
 #     oneliners = []
 #     with open(oneliners_pos, "r") as oneliners_f:
 #         for line in oneliners_f:
@@ -747,35 +748,36 @@ if __name__ == "__main__":
 #             oneliners.append(line)
 #             if len(oneliners) >= 50:
 #                 break
-         
+          
 #     class StatParserWrapper():
 #         def __init__(self,parser):
 #             self.parser=parser
 #         
 #         def parse(self, document):
 #             return self.parser.parse(" ".join(document))
-     
+      
 #     from stat_parser import Parser
 #     from parser.bllip_wrapper import BllipParser
 #     bllip = BllipParser()
 #     from nltk.parse.stanford import StanfordParser
+ 
     parser = StanfordParser()
-     
-         
+       
+           
     anchor_extractor = YangHumourAnchorExtractor(parser.raw_parse_sents, yang, 3)
-  
+    
     import pickle
 # #     with open("oneliners.pkl", "wb") as f:
 # #         pickle.dump(oneliner_docs_and_labels, f)
 #     with open("oneliners.pkl", "rb") as f:
 #         oneliner_docs_and_labels = pickle.load(f)
 #     docs, labels = zip(*oneliner_docs_and_labels)
-      
+        
     docs, labels = zip(*docs_and_labels)
     with open("potd_raw.pkl", "wb") as f:
         pickle.dump(docs_and_labels, f)
-      
-    docs = [word_tokenize(doc.lower()) for doc in docs]
+        
+    docs = [[word_tokenize(sent) for sent in sent_tokenize(doc.lower())] for doc in docs]
 #     parses = parser.parse_raw_sents(docs)
 #     print(parses)
       
@@ -795,6 +797,6 @@ if __name__ == "__main__":
 #         print(oneliner)
 #     print(anchors)
 #     print()
-       
+         
     with open("potd_anchors.pkl", "wb") as f:
         pickle.dump(anchors, f)

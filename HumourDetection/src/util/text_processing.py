@@ -3,7 +3,7 @@ Created on Feb 6, 2018
 
 @author: Andrew Cattle <acattle@cse.ust.hk>
 '''
-from nltk import word_tokenize
+from nltk import word_tokenize, sent_tokenize
 from string import punctuation
 from itertools import combinations
 from nltk.corpus import stopwords
@@ -13,7 +13,7 @@ ENGLISH_STOPWORDS = set(stopwords.words('english'))
 ENGLISH_STOPWORDS.add("n't") #added for compatibility with word_tokenize
 #TODO: this set of stopwords will remove negations like "no", "not", etc. Is this what we want to do?
 
-def default_preprocessing_and_tokenization(documents, stopwords=ENGLISH_STOPWORDS):
+def default_preprocessing_and_tokenization(documents, stopwords=ENGLISH_STOPWORDS, flatten_sents=True):
     """
         A method for preprocessing and tokening documents that should be good
         enough for the majority of contexts.
@@ -25,9 +25,11 @@ def default_preprocessing_and_tokenization(documents, stopwords=ENGLISH_STOPWORD
         :type documents: Iterable[str]
         :param stopwords: stopwords to be removed
         :type stopwords: Iterable[str]
+        :param flatten_sents: specifies whether sentences should be flattened into a single list of tokens
+        :type flatten_sents: bool
         
         :returns: preprocessed and tokenized document
-        :rtype: List[List[str]]
+        :rtype: List[List[str]] or List[List[List[str]]]
     """
     
     if not stopwords:
@@ -37,19 +39,26 @@ def default_preprocessing_and_tokenization(documents, stopwords=ENGLISH_STOPWORD
     preprocessed_documents = []
     
     for document in documents:
-        tokens = word_tokenize(document.lower()) #Tokenize and lowercase document
-        #TODO: keep sentence information?
-        
-        processed_tokens = []
-        for token in tokens:
-            if token not in stopwords:
-                token = punc_re.sub("", token) #remove punctuation
-                #https://stackoverflow.com/questions/265960/best-way-to-strip-punctuation-from-a-string-in-python
-                
-                if token: #if this isn't an empty string
-                    processed_tokens.append(token)
-        
-        preprocessed_documents.append(processed_tokens)
+        processed_doc = []
+        for sent in sent_tokenize(document.lower()):
+            tokens = word_tokenize(sent)
+            
+            processed_tokens = []
+            for token in tokens:
+                if token not in stopwords:
+                    token = punc_re.sub("", token) #remove punctuation
+                    #https://stackoverflow.com/questions/265960/best-way-to-strip-punctuation-from-a-string-in-python
+                    
+                    if punc_re.sub("", token): #if we have at least one non-punctuation character
+                        #This will remove punctuation-only tokens while preserving contractions and posessives which are important for parsing.
+                        processed_tokens.append(token)
+            
+            if flatten_sents:
+                processed_doc.extend(processed_tokens)
+            else:
+                processed_doc.append(processed_tokens)
+            
+        preprocessed_documents.append(processed_doc)
     
     return preprocessed_documents
 
