@@ -1,7 +1,15 @@
 '''
 Created on Feb 7, 2018
 
-@author: Andrew
+@author: Andrew Cattle <acattle@cse.ust.hk>
+
+This module contains methods for reading and working with word association files
+using the IGraph library.
+
+Please not that all constructers expect the respective pajek files available at
+http://vlado.fmf.uni-lj.si/pub/networks/data/dic/eat/Eat.htm for EAT
+and http://vlado.fmf.uni-lj.si/pub/networks/data/dic/fa/FreeAssoc.htm for USF.
+Also note that you may need to modify the pajek file headers to work with IGraph
 '''
 from __future__ import print_function, division #For Python 2.7 compatibility
 from math import log10
@@ -121,8 +129,8 @@ def main():
 #     strengths = graph.get_association_strengths([(a.strip(),b.strip())])[0]
     matrix = graph.graph.shortest_paths(sources, targets, weights="-log weight", mode=OUT)
     
-    s_map = {(s,i) for i, s in enumerate(sources)}
-    t_map = {(t,i) for i, t in enumerate(targets)}
+    s_map = {s:i for i, s in enumerate(sources)}
+    t_map = {t:i for i, t in enumerate(targets)}
     
     for a,b in word_pairs:
         dist = matrix[s_map[a]][t_map[b]] if (a in s_map and b in t_map) else float("inf")
