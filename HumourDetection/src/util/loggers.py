@@ -15,10 +15,10 @@ import logging
 formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
 # tell the handler to use this format
 console = logging.StreamHandler()
-console.setLevel(logging.INFO)
+console.setLevel(logging.DEBUG)
 console.setFormatter(formatter)
 # add the handler to the root logger
-logging.getLogger('').addHandler(console)
+logging.getLogger().addHandler(console)
 
 class LoggerMixin():
     
