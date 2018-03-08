@@ -529,8 +529,8 @@ class YangHumourAnchorExtractor(LoggerMixin):
         """
         Find humour anchors for each document
         
-        :param documents: documents to process as list of tokens
-        :type documents: List[List[str]]
+        :param documents: documents to process as list sentences of tokens
+        :type documents: List[List[List[str]]]
         
         :returns: extracted humour anchors
         :rtype: List[List[str]]
@@ -539,12 +539,11 @@ class YangHumourAnchorExtractor(LoggerMixin):
         docs_to_parse = []
         doc_indexes = [] #used for mapping each parse to it's original document
         for doc_num, doc in enumerate(documents):
-            #documents are lists of tokens
-            #If a document contains multiple sentences, it might not parse properly
-            #sent_tokenize only works on strings, not lists of tokens
-            #so just add spaces between the tokens and let the parser retokenize everything
-            for sent in sent_tokenize(" ".join(doc)):
-                docs_to_parse.append(sent)
+            #parse sentences separately, but remember which doc they belong to
+            for sent in doc:
+                #For Stanford parser, raw_parse_sents is more robust than parse_sents in terms of character escaping
+                #but raw_parse_sents takes strings, not lists of tokens so we need to join the tokens
+                docs_to_parse.append(" ".join(sent))
                 doc_indexes.append(doc_num)
          
         parses = self.raw_parse_sents(docs_to_parse)
@@ -689,15 +688,15 @@ if __name__ == "__main__":
        
 #     X,y = zip(*docs_and_labels)
 #     from util.text_processing import default_preprocessing_and_tokenization
-#     X = default_preprocessing_and_tokenization(X, stopwords=[], flatten_sents=False)
+#     X = default_preprocessing_and_tokenization(X, stopwords=[], flatten_sents=True)
 #     print("starting training")
 #     yang = train_yang_et_al_2015_pipeline(X, y, get_google_word2vec, wilson_lexicon_loc, n_estimators=100, min_samples_leaf=100, n_jobs=1)
 #     print("training complete\n\n")
 #     yang.named_steps["extract_features"]._purge_cache()
-#         
+#          
 # #     from timeit import timeit
 # #     timeit("train_yang_et_al_2015_pipeline(X, y, get_google_word2vec, wilson_lexicon_loc, n_estimators=100, min_samples_leaf=100, n_jobs=-1)", "from __main__ import *\nfrom __main__ import _convert_pos_to_wordnet", number=1)
-#           
+#            
 #     #save the model
 # #     yang.named_steps["extract_features"]._purge_w2v_model() #smaller pkl
 # #     from sklearn.externals import joblib
@@ -705,22 +704,22 @@ if __name__ == "__main__":
 #     import dill
 #     with open("yang_pipeline_potd.dill", "wb") as yang_f:
 #         dill.dump(yang, yang_f)
-#          
-#          
+#           
+#           
 #     docs_and_labels = oneliner_docs_and_labels
 #     random.seed(10)
 #     random.shuffle(docs_and_labels)
 #     X,y = zip(*docs_and_labels)
-#     X = default_preprocessing_and_tokenization(X, stopwords=[], flatten_sents=False)
+#     X = default_preprocessing_and_tokenization(X, stopwords=[], flatten_sents=True)
 #     print("starting training")
 #     yang = train_yang_et_al_2015_pipeline(X, y, get_google_word2vec, wilson_lexicon_loc, n_estimators=100, min_samples_leaf=100, n_jobs=1)
 #     print("training complete\n\n")
 #     yang.named_steps["extract_features"]._purge_cache()
 #     with open("yang_pipeline_ol.dill", "wb") as yang_f:
 #         dill.dump(yang, yang_f)
-    
+     
     import dill
-    with open("yang_pipeline_potd.dill", "rb") as yang_f:
+    with open("yang_pipeline_ol.dill", "rb") as yang_f:
         yang=dill.load(yang_f)
       
 # #     from sklearn.preprocessing.data import StandardScaler
@@ -776,11 +775,12 @@ if __name__ == "__main__":
     docs, labels = zip(*docs_and_labels)
     with open("potd_raw.pkl", "wb") as f:
         pickle.dump(docs_and_labels, f)
-        
-    docs = [[word_tokenize(sent) for sent in sent_tokenize(doc.lower())] for doc in docs]
+    
+    from util.text_processing import default_preprocessing_and_tokenization
+    docs = default_preprocessing_and_tokenization(docs, [], False)
 #     parses = parser.parse_raw_sents(docs)
 #     print(parses)
-      
+        
     anchors= anchor_extractor.find_humour_anchors(docs)
 #     count = 0
 #     total = len(oneliner_docs_and_labels)
