@@ -29,6 +29,9 @@ def default_preprocessing_and_tokenization(documents, stopwords=ENGLISH_STOPWORD
         :returns: preprocessed and tokenized document
         :rtype: List[List[str]]
     """
+    
+    if not stopwords:
+        stopwords=set()
     punc_re = re.compile(f'[{re.escape(punctuation)}]')
     
     preprocessed_documents = []

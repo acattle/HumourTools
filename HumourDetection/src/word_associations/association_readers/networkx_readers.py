@@ -1,7 +1,14 @@
 '''
 Created on Jan 27, 2017
 
-@author: Andrew
+@author: Andrew Cattle <acattle@cse.ust.hk>
+
+This module contains methods for reading and working with word association files
+using the NetworkX library.
+
+Please not that all constructers expect the respective pajek files available at
+http://vlado.fmf.uni-lj.si/pub/networks/data/dic/eat/Eat.htm for EAT
+and http://vlado.fmf.uni-lj.si/pub/networks/data/dic/fa/FreeAssoc.htm for USF.
 '''
 from __future__ import print_function, division #For Python 2.7 compatibility
 from networkx import read_pajek, shortest_path_length

@@ -29,4 +29,7 @@ def get_strengths_wsl(word_pairs, dataset, pajek_loc, tmpdir=None):
 #                 if line.strip():
                 strengths.append(float(line))
     
+    if (len(word_pairs) != len(strengths)):
+        raise RuntimeError("For some reason we didn't get a strenght for each unique word pair. Check error above")
+    
     return strengths

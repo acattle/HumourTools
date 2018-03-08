@@ -194,7 +194,7 @@ if __name__ == "__main__":
 #     vector_loc = "c:/vectors/GoogleNews-vectors-negative300.bin"
 #     
 #     w2v = load_gensim_vector_model(GOOGLE_W2V, vector_loc, True)
-    from util.common_models import get_google_word2vec
+    from util.model_wrappers.common_models import get_google_word2vec
     w2v=get_google_word2vec()
     
     oov_v = w2v.get_vector("afasdfasgasdfgasfgasdfasdfadfs") #try to get the vector for an OOV word
