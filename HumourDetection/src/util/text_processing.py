@@ -52,11 +52,14 @@ def default_preprocessing_and_tokenization(documents, stopwords=ENGLISH_STOPWORD
                     if punc_re.sub("", token): #if we have at least one non-punctuation character
                         #This will remove punctuation-only tokens while preserving contractions and posessives which are important for parsing.
                         processed_tokens.append(token)
-            
-            if flatten_sents:
-                processed_doc.extend(processed_tokens)
-            else:
-                processed_doc.append(processed_tokens)
+                        
+            if processed_tokens: #omit empty sentences. They screw up parsing.
+                if flatten_sents:
+                    #document should be a single list
+                    processed_doc.extend(processed_tokens)
+                else:
+                    #document should be a list of sentences
+                    processed_doc.append(processed_tokens)
             
         preprocessed_documents.append(processed_doc)
     
