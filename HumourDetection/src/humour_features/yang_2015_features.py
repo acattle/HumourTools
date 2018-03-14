@@ -24,8 +24,10 @@ from humour_features.utils.common_features import get_alliteration_and_rhyme_fea
 import logging
 from util.loggers import LoggerMixin
 from util.wordnet.treebank_to_wordnet import get_wordnet_pos
+from util.text_processing import default_filter_tokens, POS_TO_IGNORE, strip_pos
+import test
 
-def train_yang_et_al_2015_pipeline(X, y, w2v_model_getter, wilson_lexicon_loc, k=5, **rf_kwargs):
+def train_yang_et_al_2015_pipeline(X, y, w2v_model_getter, wilson_lexicon_loc, k=5, pretagged=False, **rf_kwargs):
     """
         Train a  humour classifier using Yang et al. (2015)'s Word2Vec+HCF
         feature set
@@ -49,7 +51,7 @@ def train_yang_et_al_2015_pipeline(X, y, w2v_model_getter, wilson_lexicon_loc, k
     
     from sklearn.pipeline import Pipeline
     from sklearn.ensemble.forest import RandomForestClassifier
-    yang_pipeline = Pipeline([("extract_features", YangHumourFeatureExtractor(w2v_model_getter,wilson_lexicon_loc,k)),
+    yang_pipeline = Pipeline([("extract_features", YangHumourFeatureExtractor(w2v_model_getter,wilson_lexicon_loc,k,pretagged=pretagged)),
                               ("random_forest_classifier", RandomForestClassifier(**rf_kwargs))
                               ])
     yang_pipeline.fit(X,y)
@@ -425,14 +427,15 @@ class YangHumourFeatureExtractor(TransformerMixin, LoggerMixin):
             :rtype: numpy.array
         """
         
-        X_tokens = X #assume X is just tokens
-        if self.pretagged: #if X is tokens with POS labels
-            X_tokens = [[token for token, pos in document] for document in X] #get just the tokens
-        
         features = []
         
         self.logger.debug("Starting ambiguity features")
         features.append(self.get_ambiguity_features(X))
+        
+        X_tokens = X #assume X is just tokens
+        if self.pretagged: #if X is tokens with POS labels
+            X_tokens = [[token for token, pos in document] for document in X] #get just the tokens        
+        
         self.logger.debug("Starting interpersonal features")
         features.append(self.get_interpersonal_features(X_tokens))
         self.logger.debug("Starting phonetic features")
@@ -507,18 +510,22 @@ class YangHumourAnchorExtractor(LoggerMixin):
                     #we want one layer about that.
                     if subtree.label() in ["NP", "VP", "ADJP", "ADVP"]:
                         
-                        filtered_words = tuple([word.lower() for word, pos in subtree.pos() if pos not in ["DT", "PRP", ",", ":", "."]]) #TODO: filter stop words too?
+                        #filter meaningless words out of humour anchors
+                        filtered_words = tuple(strip_pos(default_filter_tokens([[subtree.pos()]], stopwords=[]))[0])
+                        #default_filter_Tokens() expects a list of documents where each is a list of sents where each is a list of token/pos pairs
+                        #That's why we put the [] around subtree.pos()
                         if filtered_words:
                             candidates.add(filtered_words) #add ordered tuple of leaves
                         #TODO: do we really want to ignore determiners?
                         #TODO: filter out determiners and other POSes?
-                    
+                
+                candidate_words = set([word for candidate in candidates for word in candidate])
                 #add remaining nouns and verbs
                 for word, pos in sent_parse.pos():
+                    word=word.lower()
                     if pos.startswith("NN") or pos.startswith("VB"):
-                        if ((not pos.startswith("PRP")) and #ignore personal pronouns #TODO: Is this needed? I originally confused PRP for NNP
-                                all(word not in candidate for candidate in candidates)): #if the word is not part of any existing candidate
-                            candidates.add((word.lower(),))
+                        if word not in candidate_words: #if the word is not part of any existing candidate
+                            candidates.add((word,))
                             #TODO: checking if we're looking at the same subtree?
                 
             doc_candidates.append(candidates)
@@ -540,22 +547,28 @@ class YangHumourAnchorExtractor(LoggerMixin):
         doc_indexes = [] #used for mapping each parse to it's original document
         for doc_num, doc in enumerate(documents):
             #parse sentences separately, but remember which doc they belong to
-            for sent in doc:
+            for sent in sent_tokenize(doc):
                 #For Stanford parser, raw_parse_sents is more robust than parse_sents in terms of character escaping
                 #but raw_parse_sents takes strings, not lists of tokens so we need to join the tokens
-                docs_to_parse.append(" ".join(sent))
+                docs_to_parse.append(sent)
                 doc_indexes.append(doc_num)
-         
+        
+        self.logger.debug("Starting parse")
         parses = self.raw_parse_sents(docs_to_parse)
         self.logger.debug("parsing done")
          
-        parsed_docs = [[] for i in range(len(documents))] #initialize an empty list for each document
+        parsed_docs = [[] for _ in range(len(documents))] #initialize an empty list for each document
         for i, parse in zip(doc_indexes, parses):
             parsed_docs[i].append(next(parse)) #just take the first parse
          
          
         doc_candidates = self.get_anchor_candidates(parsed_docs)
         self.logger.debug("got candidates")
+        
+        #Get document tokens and pos tags
+        documents = [[sent.pos() for sent in doc] for doc in parsed_docs]
+        #Filter the tokens and pos tags
+        documents = default_filter_tokens(documents, stopwords=[], flatten_sents=True)
         
 #         with open("oneliner candidates.pkl", "wb") as f:
 #             pickle.dump(doc_candidates, f)
@@ -567,8 +580,9 @@ class YangHumourAnchorExtractor(LoggerMixin):
         doc_anchors = []
         doc_humour_anchors = []
         total = len(doc_candidates)
-        for doc_num, (candidates, doc_parse) in enumerate(zip(doc_candidates, parsed_docs)):
-            doc = [tok_pos for sent in doc_parse for tok_pos in sent.pos()] #flatten the doc
+        for doc_num, (candidates, doc) in enumerate(zip(doc_candidates, documents)):
+#             print(doc_num)
+#             doc = [tok_pos for sent in doc_parse for tok_pos in sent.pos()] #flatten the doc
             
             doc_baseline_indexes.append(len(docs_to_score)) #get the index of this doc's baseline score
             docs_to_score.append(doc) #we want to make sure we get a baseline humour score
@@ -592,10 +606,10 @@ class YangHumourAnchorExtractor(LoggerMixin):
             #get only the positive label column
             pos_index = np.where(self.humour_scorer.classes_ == self.pos_class)[0][0] #get the positive column index
             humour_scores = humour_scores[:,pos_index] #all rows, only the positive column
-            
-            
-#             for baseline_index, anchors in zip(doc_baseline_indexes, doc_anchors):
-            humour_anchors = [tok for tok, pos in docs_to_score[0]] #TODO: #baseline_index]] #assume all words are humour anchors
+            #TODO: end left shift
+        
+#         for baseline_index, anchors in zip(doc_baseline_indexes, doc_anchors):
+            humour_anchors = [tok for tok, pos in docs_to_score[0]]#baseline_index]] #assume all words are humour anchors
             
             num_anchors = len(anchors)
             if num_anchors > 0: #if we have at least 1 valid humour anchor candidate combination
@@ -607,7 +621,7 @@ class YangHumourAnchorExtractor(LoggerMixin):
             
             doc_humour_anchors.append(humour_anchors)
             docs_to_score = [] #TODO: remove
-            
+#             
             processed = doc_num + 1
             if processed%self.logInterval == 0:
                 self.logger.debug(f"{processed}/{total}")
@@ -617,13 +631,19 @@ class YangHumourAnchorExtractor(LoggerMixin):
     
 if __name__ == "__main__":
     from nltk.parse.stanford import StanfordParser
+    import pickle
 #     parser = StanfordParser()
     from string import punctuation
-    potd_pos = "D:/datasets/pun of the day/puns_of_day.csv" #puns_pos_neg_data.csv
-    potd_neg = "D:/datasets/pun of the day/new_select.txt"
-    proverbs = "D:/datasets/pun of the day/proverbs.txt"
-    oneliners_pos = "D:/datasets/16000 oneliners/Jokes16000.txt"
-    oneliners_neg = "D:/datasets/16000 oneliners/MIX16000.txt"
+#     potd_pos = "D:/datasets/pun of the day/puns_of_day.csv" #puns_pos_neg_data.csv
+#     potd_neg = "D:/datasets/pun of the day/new_select.txt"
+#     proverbs = "D:/datasets/pun of the day/proverbs.txt"
+#     oneliners_pos = "D:/datasets/16000 oneliners/Jokes16000.txt"
+#     oneliners_neg = "D:/datasets/16000 oneliners/MIX16000.txt"
+    potd_pos = "/bigstore/acattle/datasets/pun of the day/puns_of_day.csv" #puns_pos_neg_data.csv
+    potd_neg = "/bigstore/acattle/datasets/pun of the day/new_select.txt"
+    proverbs = "/bigstore/acattle/datasets/pun of the day/proverbs.txt"
+    oneliners_pos = "/bigstore/acattle/datasets/16000 oneliners/Jokes16000-utf8.txt"
+    oneliners_neg = "/bigstore/acattle/datasets/16000 oneliners/MIX16000-utf8.txt"
     
     docs_and_labels=[]
     with open(potd_pos, "r") as pos_f:
@@ -637,18 +657,20 @@ if __name__ == "__main__":
         for line in neg_f:
             docs_and_labels.append((line.strip(), -1))
     with open(proverbs, "r") as neg_f:
-        p = punc_re = re.compile(f'[{re.escape(punctuation)}]')
+        p = re.compile(f'[{re.escape(punctuation)}]')
         for line in neg_f:
-            line=line.strip().lower()
+            line=line.strip()
             if len(p.sub(" ", line).split()) >5:
-                docs_and_labels.append((line.strip(), -1))
+                docs_and_labels.append((line, -1))
                 #TODO: a couple documents are surrounded by quotes. Selectively remove them?
     
     oneliner_docs_and_labels = []
-    with open(oneliners_pos, "r", encoding="ansi") as ol_pos_f:
+#     with open(oneliners_pos, "r", encoding="ansi") as ol_pos_f:
+    with open(oneliners_pos, "r") as ol_pos_f:
         for line in ol_pos_f:
             oneliner_docs_and_labels.append((line.strip(),1))
-    with open(oneliners_neg, "r", encoding="ansi") as ol_neg_f:
+#     with open(oneliners_neg, "r", encoding="ansi") as ol_neg_f:
+    with open(oneliners_neg, "r") as ol_neg_f:
         for line in ol_neg_f:
             oneliner_docs_and_labels.append((line.strip(),-1))
 #             parser.raw_parse_sents([line.strip()])
@@ -661,142 +683,129 @@ if __name__ == "__main__":
 #     oneliners_loc = "/mnt/d/datasets/16000 oneliners/Jokes16000.txt"
 #     w2v_loc = "/mnt/c/vectors/GoogleNews-vectors-negative300.bin"
     
-    wilson_lexicon_loc = "D:/datasets/subjectivity_clues_hltemnlp05/subjclueslen1-HLTEMNLP05.tff"
+#     wilson_lexicon_loc = "D:/datasets/subjectivity_clues_hltemnlp05/subjclueslen1-HLTEMNLP05.tff"
+    wilson_lexicon_loc = "/bigstore/acattle/datasets/subjectivity_clues_hltemnlp05/subjclueslen1-HLTEMNLP05.tff"
     
             
     import random
     random.seed(10)
     random.shuffle(docs_and_labels)
+    random.shuffle(oneliner_docs_and_labels)
           
     from util.model_wrappers.common_models import get_google_word2vec
-#     test_size = round(len(docs_and_labels)*0.1) #hold out 10% as test
-#     test_X, test_y = zip(*docs_and_labels[:test_size]) #unzip the documents and labels
-#     train_X, train_y = zip(*docs_and_labels[test_size:])
-#     yang = train_yang_et_al_2015_pipeline((train_X, train_y), (test_X, test_y), get_google_word2vec, wilson_lexicon_loc)
-          
-          
-#     yang = YangHumourFeatureExtractor(w2v_loc,wilson_lexicon_loc)
-#     import timeit
-#     t=timeit.timeit("YangHumourFeatureExtractor(None,None,n_jobs=3,manager=manager).get_ambiguity_features_pool(train_X)", "from __main__ import YangHumourFeatureExtractor, train_X, manager",number=1)
-#     print("main + 3 threads + shared cache: {} seconds".format(t))
-#     t=timeit.timeit("YangHumourFeatureExtractor(None,None).get_ambiguity_features_single(train_X)", "from __main__ import YangHumourFeatureExtractor, train_X",number=1)
-#     print("main thread only + caching: {} seconds".format(t))
-#     print(timeit.timeit("YangHumourFeatureExtractor(None,None,n_jobs=1).get_ambiguity_features_pool(train_X)", "from __main__ import YangHumourFeatureExtractor, train_X",number=1))
-#     print(timeit.timeit("YangHumourFeatureExtractor(None,None).get_ambiguity_features_filtered(train_X,False)", "from __main__ import YangHumourFeatureExtractor, train_X",number=1))
-           
-#     print(timeit.timeit("run_yang_et_al_2015_baseline((train_X, train_y), (test_X, test_y), w2v_loc, wilson_lexicon_loc,n_jobs=4)", "from __main__ import run_yang_et_al_2015_baseline,train_X,train_y,test_X,test_y,w2v_loc,wilson_lexicon_loc",number=1))
-       
+    from util.text_processing import default_preprocessing_and_tokenization
+        
+    with open("potd_raw_kfold.pkl", "wb") as f:
+        pickle.dump(docs_and_labels, f)
+    with open("oneliner_raw_kfold.pkl", "wb") as f:
+        pickle.dump(oneliner_docs_and_labels, f)
+
 #     X,y = zip(*docs_and_labels)
-#     from util.text_processing import default_preprocessing_and_tokenization
-#     X = default_preprocessing_and_tokenization(X, stopwords=[], flatten_sents=True)
-#     print("starting training")
-#     yang = train_yang_et_al_2015_pipeline(X, y, get_google_word2vec, wilson_lexicon_loc, n_estimators=100, min_samples_leaf=100, n_jobs=1)
+#     X = default_preprocessing_and_tokenization(X, stopwords=[], flatten_sents=True, leave_pos=True)
+#                   
+#     yang = train_yang_et_al_2015_pipeline(X, y, get_google_word2vec, wilson_lexicon_loc, pretagged=True, n_estimators=100, min_samples_leaf=100, n_jobs=1)
 #     print("training complete\n\n")
 #     yang.named_steps["extract_features"]._purge_cache()
-#          
+#              
 # #     from timeit import timeit
 # #     timeit("train_yang_et_al_2015_pipeline(X, y, get_google_word2vec, wilson_lexicon_loc, n_estimators=100, min_samples_leaf=100, n_jobs=-1)", "from __main__ import *\nfrom __main__ import _convert_pos_to_wordnet", number=1)
-#            
+#                
 #     #save the model
 # #     yang.named_steps["extract_features"]._purge_w2v_model() #smaller pkl
 # #     from sklearn.externals import joblib
 # #     joblib.dump(yang, "yang_pipeline_min100.pkl")
 #     import dill
-#     with open("yang_pipeline_potd.dill", "wb") as yang_f:
+#     with open("yang_pipeline_potd_better_filter.dill", "wb") as yang_f:
 #         dill.dump(yang, yang_f)
-#           
-#           
-#     docs_and_labels = oneliner_docs_and_labels
-#     random.seed(10)
-#     random.shuffle(docs_and_labels)
-#     X,y = zip(*docs_and_labels)
-#     X = default_preprocessing_and_tokenization(X, stopwords=[], flatten_sents=True)
+#               
+#      
+#     X,y = zip(*oneliner_docs_and_labels)
+#     X = default_preprocessing_and_tokenization(X, stopwords=[], flatten_sents=True, leave_pos=True)
 #     print("starting training")
-#     yang = train_yang_et_al_2015_pipeline(X, y, get_google_word2vec, wilson_lexicon_loc, n_estimators=100, min_samples_leaf=100, n_jobs=1)
+#     yang = train_yang_et_al_2015_pipeline(X, y, get_google_word2vec, wilson_lexicon_loc, pretagged=True, n_estimators=100, min_samples_leaf=100, n_jobs=1)
 #     print("training complete\n\n")
 #     yang.named_steps["extract_features"]._purge_cache()
-#     with open("yang_pipeline_ol.dill", "wb") as yang_f:
+#     with open("yang_pipeline_ol_better_filter.dill", "wb") as yang_f:
 #         dill.dump(yang, yang_f)
      
-    import dill
-    with open("yang_pipeline_ol.dill", "rb") as yang_f:
-        yang=dill.load(yang_f)
-      
-# #     from sklearn.preprocessing.data import StandardScaler
-# # #     from sklearn.svm.classes import LinearSVC
-# #     from sklearn.linear_model import LogisticRegression
-# #     from sklearn.pipeline import Pipeline
-# #     dumb_classifier = Pipeline([("count vector", CountVectorizer()),
-# # #                                 ("scale", StandardScaler()),
-# #                                 ("logistic regression", LogisticRegression())
-# #                                 ])
-# #     dumb_classifier.fit(X,y)
-# #     print('fitted')
-# #     with open("bow_lr.dill", "wb") as bow_f:
-# #         dill.dump(dumb_classifier, bow_f)
-#     with open("bow_lr.dill", "rb") as bow_f:
-#         dumb_classifier = dill.load(bow_f)
-             
-             
-#     oneliners = []
-#     with open(oneliners_pos, "r") as oneliners_f:
-#         for line in oneliners_f:
-# #             words = nltk.word_tokenize(line.lower())
-# #             words = [w for w in words if w.isalpha()]
-#                 
-#             oneliners.append(line)
-#             if len(oneliners) >= 50:
-#                 break
-          
-#     class StatParserWrapper():
-#         def __init__(self,parser):
-#             self.parser=parser
-#         
-#         def parse(self, document):
-#             return self.parser.parse(" ".join(document))
-      
-#     from stat_parser import Parser
-#     from parser.bllip_wrapper import BllipParser
-#     bllip = BllipParser()
-#     from nltk.parse.stanford import StanfordParser
+    
  
     parser = StanfordParser()
-       
+#     jar_loc = "/bigstore/acattle/stanford-parser-full-2017-06-09/stanford-parser.jar"
+#     model_loc = "/bigstore/acattle/stanford-parser-full-2017-06-09/stanford-parser-3.8.0-models.jar"
+#     parser = StanfordParser(model_loc, jar_loc)
            
-    anchor_extractor = YangHumourAnchorExtractor(parser.raw_parse_sents, yang, 3)
     
-    import pickle
+    from util.text_processing import default_preprocessing_and_tokenization
+    import dill
 # #     with open("oneliners.pkl", "wb") as f:
 # #         pickle.dump(oneliner_docs_and_labels, f)
 #     with open("oneliners.pkl", "rb") as f:
 #         oneliner_docs_and_labels = pickle.load(f)
 #     docs, labels = zip(*oneliner_docs_and_labels)
         
-    docs, labels = zip(*docs_and_labels)
-    with open("potd_raw.pkl", "wb") as f:
-        pickle.dump(docs_and_labels, f)
     
-    from util.text_processing import default_preprocessing_and_tokenization
-    docs = default_preprocessing_and_tokenization(docs, [], False)
-#     parses = parser.parse_raw_sents(docs)
-#     print(parses)
+#     with open("potd_raw.pkl", "rb") as f:
+#         docs_and_labels=pickle.load(f)
+
+    #oneliners
+#     with open("yang_pipeline_potd_better_filter.dill", "rb") as yang_f:
+#         yang=dill.load(yang_f)
         
-    anchors= anchor_extractor.find_humour_anchors(docs)
-#     count = 0
-#     total = len(oneliner_docs_and_labels)
-#     anchor_map = {}
-#     for oneliner, label in oneliner_docs_and_labels:
-#         anchors= anchor_extractor.find_humour_anchors(oneliner)
-#         anchor_map[oneliner] = anchors
-#                     print(oneliner)
-#                     print(anchors)
-#                     print("\n")
-#         count+=1
-# #         if count%50 == 0:
-#         print(f"{count}/{total}")
-#         print(oneliner)
-#     print(anchors)
-#     print()
+    docs, labels = zip(*oneliner_docs_and_labels)
+#     docs = default_preprocessing_and_tokenization(docs, [], False)
+
+    from sklearn.cross_validation import StratifiedKFold
+    kfold = StratifiedKFold(10)
+    splits = list(kfold.split(docs,labels))
+    with open("oneliner_splits.pkl", "wb") as f:
+        pickle.dump(splits, f)
+    
+    anchor_map = dict()
+    for training, test in splits:
+        X_train = [docs[i] for i in training]
+        y_train = [labels[i] for i in training]
+        X_test = [docs[i] for i in test]
+        
+        yang = train_yang_et_al_2015_pipeline(X_train, y_train, get_google_word2vec, wilson_lexicon_loc, pretagged=True, n_estimators=100, min_samples_leaf=100, n_jobs=1)
+
+        anchor_extractor = YangHumourAnchorExtractor(parser.raw_parse_sents, yang, 3)
+        anchors = anchor_extractor.find_humour_anchors(X_test)
+        anchor_map.update({d:a for d,a in zip(X_test, anchors)})
+    
+    with open("oneliner_kfold_anchor_map.pkl", "wb") as f:
+        pickle.dump(anchor_map, f)
+        
          
-    with open("potd_anchors.pkl", "wb") as f:
-        pickle.dump(anchors, f)
+#     with open("ol_anchors_potd_model_better_filter.pkl", "wb") as f:
+#         pickle.dump(anchors, f)
+    
+    
+    
+    #potd
+#     with open("yang_pipeline_ol_better_filter.dill", "rb") as yang_f:
+#         yang=dill.load(yang_f)
+        
+    docs, labels = zip(*docs_and_labels)
+#     docs = default_preprocessing_and_tokenization(docs, [], False)
+    
+    kfold = StratifiedKFold(10)
+    splits = list(kfold.split(docs,labels))
+    with open("potd_splits.pkl", "wb") as f:
+        pickle.dump(splits, f)
+    
+    anchor_map = dict()
+    for training, test in splits:
+        X_train = [docs[i] for i in training]
+        y_train = [labels[i] for i in training]
+        X_test = [docs[i] for i in test]
+    
+        anchor_extractor = YangHumourAnchorExtractor(parser.raw_parse_sents, yang, 3)
+        anchors= anchor_extractor.find_humour_anchors(docs)
+        anchor_map.update({d:a for d,a in zip(X_test, anchors)})
+    
+    with open("oneliner_kfold_anchor_map.pkl", "wb") as f:
+        pickle.dump(anchor_map, f)
+         
+#     with open("potd_anchors_ol_model_better_filter.pkl", "wb") as f:
+#         pickle.dump(anchors, f)
