@@ -13,7 +13,7 @@ Created on Jan 22, 2017
 
 from gensim.models import LsiModel, LdaModel
 import numpy as np
-from scipy.spatial.distance import cosine
+from gensim.matutils import cossim
 import logging
 from util.model_wrappers.gensim_wrappers.gensim_tfidf_models import load_gensim_tfidf_model
 
@@ -198,6 +198,7 @@ class GensimTopicSumModel(object):
             :returns: the topic scores as a nummpy array
             :rtype: np.array
         """
+        
         #initialize vector to all 0s
         vec = np.zeros(self._get_model().num_topics)
         
@@ -206,43 +207,58 @@ class GensimTopicSumModel(object):
         
         return vec
     
-    def get_vector(self,document):
+    def get_topics(self, document):
         """
             Summarize document according to the topic summarization model.
             
-            :param document: document to retreive topic scores for
+            :param document: document to retrieve topic scores for
             :type document: str
             
-            :returns: the vector corresponding to word
-            :rtype: np.array
+            :returns: a list of tuples containing the topic id and the topic score
+            :rtype: List[Tuple[int,float]]
         """
-        vector = None
+        topic_scores = None
         if (self._cache != None) and (document in self._cache):
-            vector = self._cache[document]
+            topic_scores = self._cache[document]
         else:
             tfidf_vector = self.tfidf_model.get_tfidf_vector(document)
-            tuples = self._get_model()[tfidf_vector]
-            vector = self._convert_to_numpy_array(tuples)
+            topic_scores = self._get_model()[tfidf_vector]
             
             if self._cache != None:
-                self._cache[document] = vector
+                self._cache[document] = topic_scores
+            
+        return topic_scores
+    
+    def get_vector(self,document):
+        """
+            Summarize document according to the topic summarization model and
+            convert to numpy vector
+            
+            :param document: document to retrieve topic scores for
+            :type document: str
+            
+            :returns: the topic vector corresponding to word
+            :rtype: np.array
+        """
+        tuples = self.get_topics(document)
+        vector = self._convert_to_numpy_array(tuples)
             
         return vector
     
-    def get_similarity(self, word1, word2):
+    def get_similarity(self, doc1, doc2):
         """
             Get the cosine similarity between topic vectors corresponding to
-            word1 and word2.
+            doc1 and doc.
             
-            :param word1: the first word to compare
-            :type word1: str
-            :param word2: the second word to compare
-            :type word2: str
+            :param doc1: the first document to compare
+            :type doc1: str
+            :param doc2: the second document to compare
+            :type doc2: str
             
             :returns: the cosine similarity between word1 and word2
             :rtype: float
         """
-        return 1-cosine(self.get_vector(word1), self.get_vector(word2)) #since it's cosine distance
+        return cossim(self.get_topics(doc1), self.get_topics(doc2))
 
 class GensimLDAModel(GensimTopicSumModel):
     def __init__(self, lda_fileloc, tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer=lambda x: x.split(), cache=True, lazy_load=True):
@@ -325,7 +341,7 @@ if __name__ == "__main__":
 #     tfidf_model_loc="c:/vectors/lda_prep_no_lemma/lda_no_lemma.tfidf_model"
 #     
 #     lda = load_gensim_topicsum_model(WIKIPEDIA_LDA, TYPE_LDA, lda_loc, WIKIPEDIA_TFIDF, word_ids_loc, tfidf_model_loc)
-    from util.common_models import get_wikipedia_lda
+    from util.model_wrappers.common_models import get_wikipedia_lda
     lda = get_wikipedia_lda()
     
     topic_vec = lda.get_vector("the king wears a king and lives in the king house")
