@@ -81,8 +81,71 @@ class EvocationDataset(object):
         """
         return self.evocation.items()
     
+class SWoW_Dataset:
+    """
+    Class for reading Small World of Words dataset from CSV
     
+    See https://smallworldofwords.org/en/project/research
+    """
     
+    def __init__(self, association_loc, complete=True):
+        """
+        Read Small World of Words dataset in CSV format
+        
+        :param: association_loc: location of the SWoW csv
+        :type: association_loc: str
+        :param: complete: Specifies whether file at association_loc is the "complete" or "R100" version
+        :type: complete: bool
+        """
+        
+        totals = {}
+        counts = {}
+        self.vocab = set()
+        self.assoc_dict = {}
+        
+        #SWOW-EN.complete columns
+        cue_col = 11
+        R123_cols = (15,16,17)
+        no_more_str = "\"No more responses\""
+        if  not complete:
+            cue_col = 9
+            R123_cols = (10,11,12)
+            no_more_str = "NA"
+        
+        with open(association_loc, "r", encoding="utf-8") as f:
+            f.readline() #pop the header
+            
+            for l in f:
+                l=l.split(",")
+                s = l[cue_col].strip()[1:-1] #remove quotes 
+                
+                self.vocab.add(s)
+                totals[s] = totals.get(s,0) + 1
+                
+                for i in R123_cols:
+                    r = l[i].strip()
+                    
+                    if r == no_more_str:
+                        #no more responses. Skip to next line
+                        break
+                    
+                    r= r[1:-1] #remove quotes
+                    self.vocab.add(r)
+                    counts[(s,r)] = counts.get((s,r), 0) + 1
+        
+        self.assoc_dict = {}  
+        for (s,r), count in counts.items():
+            self.assoc_dict[(s,r)] = count / totals[s]
+    
+    def get_all_associations(self):
+        """
+        Return all SWoW associations as a tuple containing the cue and response (as a nested tuple) and strength
+        
+        :returns: list of tuples containing cue, response, and strength in that order
+        :rtype: List[Tuple[str,str,float]] 
+        """
+        return list(self.assoc_dict.items())
+            
 
 class EAT_XML_Reader:
     """
@@ -91,7 +154,7 @@ class EAT_XML_Reader:
     http://rali.iro.umontreal.ca/rali/?q=en/Textual%20Resources/EAT
     """
     def __init__(self, xml_loc):
-        self.eat_root = ET.parse(xml_loc).getroot()
+        self.root = ET.parse(xml_loc).getroot()
         
     def get_all_associations(self):
         """
@@ -102,7 +165,7 @@ class EAT_XML_Reader:
         """
         associations=[]
         
-        for stimulus_element in self.eat_root:
+        for stimulus_element in self.root:
             stimuli = stimulus_element.attrib["word"]
             total = float(stimulus_element.attrib["all"])
             
@@ -122,7 +185,7 @@ class USF_XML_Reader:
     http://rali.iro.umontreal.ca/rali/?q=en/USF-FAN
     """
     def __init__(self, xml_loc):
-        self.eat_root = ET.parse(xml_loc).getroot()
+        self.root = ET.parse(xml_loc).getroot()
         
     def get_all_associations(self):
         """
@@ -133,7 +196,7 @@ class USF_XML_Reader:
         """
         associations=[]
         
-        for stimulus_element in self.eat_root:
+        for stimulus_element in self.root:
             stimuli = stimulus_element.attrib["word"]
             
             for response_element in stimulus_element:

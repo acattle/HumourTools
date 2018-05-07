@@ -96,6 +96,41 @@ class USFNetworkx(AssociationNetworkx):
          
         set_edge_attributes(self.graph, neg_log_proportions, "-log weight")
 
+
+def  networkxFromTuples(association_tuples):
+    """
+    Creates an AssociationNetworkx from a list of strength tuples
+    
+    :param: association_tuples: list of association tuples of form ((stim, resp), stren)
+    :type: association_tuples: List[Tuple[Tuple[str,str], float]]
+    
+    :return: Networkx of the association tuples
+    :rtype: AssociationNetworkx
+    """
+    
+    #get unique words
+    vocab = set()
+    for (s,r), _ in association_tuples:
+        vocab.add(s)
+        vocab.add(r)
+    vocab = list(vocab) #convert to ordered list
+    
+    
+    graph = DiGraph()
+    graph.add_nodes_from(vocab)
+    association_tuples = [(s,r,stren) for (s,r), stren in association_tuples]
+    graph.add_weighted_edges_from(association_tuples)
+    
+    #get negative log weights
+    neg_log_proportions = {}
+    for stimuli, response, weight in graph.edges(data='weight', default=0):
+        neg_log_proportions[(stimuli, response)] = -log10(weight)
+    set_edge_attributes(graph, neg_log_proportions, "-log weight")
+    
+    
+    assoc_object = AssociationNetworkx()
+    assoc_object.graph = graph
+    return assoc_object
                                    
 if __name__ == "__main__":
     import pickle

@@ -206,11 +206,12 @@ if __name__ == '__main__':
     from util.model_wrappers import word2gauss_wrapper
     #TODO: are these even needed?
     
-    from word_associations.association_readers.xml_readers import EAT_XML_Reader, USF_XML_Reader, EvocationDataset
+    from word_associations.association_readers.xml_readers import EAT_XML_Reader, USF_XML_Reader, EvocationDataset, SWoW_Dataset
     eat = EAT_XML_Reader("../Data/eat/eat-stimulus-response.xml").get_all_associations()
     usf = USF_XML_Reader("../Data/usf/cue-target.xml").get_all_associations()
     evoc = EvocationDataset("../Data/evocation").get_all_associations()
     evoc = [((wp[0].split(".")[0], wp[1].split(".")[0]), stren) for wp, stren in evoc] #remove synset information
+    swow = SWoW_Dataset("D:/datasets/SWoW/SWOW-EN.complete.csv").get_all_associations()
      
-    for dataset in [("eat", eat), ("usf", usf), ("evoc", evoc)]:
+    for dataset in [("swow", swow)]:#("eat", eat), ("usf", usf), ("evoc", evoc), ("swow", swow)]:
         main(dataset)

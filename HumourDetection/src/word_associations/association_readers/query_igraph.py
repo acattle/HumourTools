@@ -15,7 +15,7 @@ def get_strengths_wsl(word_pairs, dataset, pajek_loc, tmpdir=None):
         wp_loc = os.path.join(td, "word_pairs")
         out_loc = os.path.join(td, "strength_output")
         
-        with open(wp_loc, "w") as wp_f:
+        with open(wp_loc, "w", encoding="utf-8") as wp_f:
             for a,b in word_pairs:
                 wp_f.write(f"{a}\t{b}\n")
         

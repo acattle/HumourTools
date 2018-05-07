@@ -88,6 +88,45 @@ class USFIGraph(AssociationIGraph):
             neg_log_proportions.append(-log10(e["weight"]))
          
         self.graph.es["-log weight"] = neg_log_proportions
+        
+
+def  iGraphFromTuples(association_tuples):
+    """
+    Creates an AssociationIGraph from a list of strength tuples
+    
+    :param: association_tuples: list of association tuples of form ((stim, resp), stren)
+    :type: association_tuples: List[Tuple[Tuple[str,str], float]]
+    
+    :return: iGraph of the association tuples
+    :rtype: AssociationIGraph
+    """
+    
+    #get unique words
+    vocab = set()
+    for (s,r), _ in association_tuples:
+        vocab.add(s)
+        vocab.add(r)
+    vocab = list(vocab) #convert to ordered list
+    
+    
+    graph = Graph(len(vocab), directed=True)
+    graph.vs["name"] = vocab #set vertex names
+    edges, _ = zip(*association_tuples)
+    graph.add_edges(edges)
+    
+    #add weights
+    for pair, stren in association_tuples:
+        graph[pair] = stren
+    neg_log_proportions = []
+    for e in graph.es:
+        neg_log_proportions.append(-log10(e["weight"]))
+     
+    graph.es["-log weight"] = neg_log_proportions
+    
+    assoc_object = AssociationIGraph()
+    assoc_object.graph = graph
+    return assoc_object
+    
 
 def main():
     USF = "usf"
