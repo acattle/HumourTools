@@ -14,7 +14,7 @@ ENGLISH_STOPWORDS = set(stopwords.words('english'))
 ENGLISH_STOPWORDS.add("n't") #added for compatibility with word_tokenize
 #TODO: this set of stopwords will remove negations like "no", "not", etc. Is this what we want to do?
 
-POS_TO_IGNORE = set(["DT","POS","PRP","PRP$","TO","UH",",",",",":","(",")"])
+POS_TO_IGNORE = set(["DT","POS","PRP","PRP$","TO","UH","MD",".",",",":","(",")","-RRB-","-LRB-","-RSB-","-LSB-","-RCB-","-LCB-","``","''"])
 
 def default_preprocessing_and_tokenization(documents, lowercase=True, stopwords=ENGLISH_STOPWORDS, pos_to_ignore=POS_TO_IGNORE, flatten_sents=True, leave_pos=False):
     """
