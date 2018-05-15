@@ -12,7 +12,7 @@ See https://stackoverflow.com/a/35022654/1369712 for more details
 import logging
 
 # https://docs.python.org/3/howto/logging-cookbook.html
-formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
+formatter = logging.Formatter('%(asctime)s %(name)-12s: %(levelname)-8s %(message)s',"%Y-%m-%d %H:%M:%S")
 # tell the handler to use this format
 console = logging.StreamHandler()
 console.setLevel(logging.DEBUG)
@@ -24,7 +24,7 @@ class LoggerMixin():
     
     @property #using property lets us call this function like a variable https://www.programiz.com/python-programming/property
     def logger(self):
-        component = "{}.{}".format(type(self).__module__, type(self).__name__)
+        component = "{}".format(type(self).__name__)
         logger = logging.getLogger(component)
 #         if not len(logger.handlers):
 #             #if we haven't already set up a handler, add one that prints to console
