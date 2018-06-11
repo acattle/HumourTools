@@ -97,16 +97,16 @@ class KenLMSubprocessWrapper():
             doc_loc = os.path.join(td, "documents")
             out_loc = os.path.join(td, "kenlm_query_output")
             
-            with open(doc_loc, "w") as df:
+            with open(doc_loc, "w", encoding="utf-8") as df:
                 for doc in documents:
                     df.write(" ".join(doc))
                     df.write("\n")
             
-            with open(doc_loc, "r") as df, open(out_loc, "w") as out_f:
+            with open(doc_loc, "r", encoding="utf-8") as df, open(out_loc, "w", encoding="utf-8") as out_f:
                 #TODO: will this properly report errors?
                 subprocess.run(query_str, stdin=df, stdout=out_f)
             
-            with open(out_loc, "r") as out_f:
+            with open(out_loc, "r", encoding="utf-8") as out_f:
                 log_probs = self._process_query_output(out_f)
             
         return log_probs
