@@ -134,15 +134,21 @@ def default_filter_tokens(documents, lowercase=True, stopwords=ENGLISH_STOPWORDS
         filtered_docs.append(filtered_doc)
     
     return filtered_docs
-            
+
+def strip_pos_sent(sent):
+    """
+    Strip POS from a single sentence
+    """
+    return [tok for tok, _ in sent]
+
 def strip_pos(documents, flatten_sents=True):
     stripped_docs = []
     if flatten_sents:
         #documents are a list of list of tokens
-        stripped_docs = [[tok for tok, _ in doc] for doc in documents]
+        stripped_docs = [strip_pos_sent(doc) for doc in documents]
     else:
         #documents are a list of list of list of tokens
-        stripped_docs = [[[tok for tok, _ in sent] for sent in doc] for doc in documents]
+        stripped_docs = [[strip_pos_sent(sent) for sent in doc] for doc in documents]
     
     return stripped_docs
 
