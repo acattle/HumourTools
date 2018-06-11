@@ -11,7 +11,7 @@ http://vlado.fmf.uni-lj.si/pub/networks/data/dic/eat/Eat.htm for EAT
 and http://vlado.fmf.uni-lj.si/pub/networks/data/dic/fa/FreeAssoc.htm for USF.
 '''
 from __future__ import print_function, division #For Python 2.7 compatibility
-from networkx import read_pajek, shortest_path_length
+from networkx import read_pajek, shortest_path_length, write_pajek
 from networkx.classes.function import set_edge_attributes
 from networkx.classes.digraph import DiGraph
 from math import log10
@@ -111,14 +111,14 @@ def  networkxFromTuples(association_tuples):
     #get unique words
     vocab = set()
     for (s,r), _ in association_tuples:
-        vocab.add(s)
-        vocab.add(r)
+        vocab.add(s.upper())
+        vocab.add(r.upper())
     vocab = list(vocab) #convert to ordered list
     
     
     graph = DiGraph()
     graph.add_nodes_from(vocab)
-    association_tuples = [(s,r,stren) for (s,r), stren in association_tuples]
+    association_tuples = [(s.upper(),r.upper(),stren) for (s,r), stren in association_tuples]
     graph.add_weighted_edges_from(association_tuples)
     
     #get negative log weights
@@ -135,6 +135,32 @@ def  networkxFromTuples(association_tuples):
 if __name__ == "__main__":
     import pickle
     from time import strftime
+    
+    
+    from word_associations.association_readers.xml_readers import SWoW_Dataset, SWoW_Strengths_Dataset
+    swow_all = SWoW_Dataset("D:/datasets/SWoW/SWOW-EN.complete.csv").get_all_associations()
+    swow_all_graph = networkxFromTuples(swow_all)
+    write_pajek(swow_all_graph.graph, "D:/datasets/SWoW/swow_all.net")
+    
+    swow_100 = SWoW_Dataset("D:/datasets/SWoW/SWOW-EN.R100.csv",complete=False).get_all_associations()
+    swow_100_graph = networkxFromTuples(swow_100)
+    write_pajek(swow_100_graph.graph, "D:/datasets/SWoW/swow_100.net")
+    
+    swow_stren = SWoW_Strengths_Dataset("D:/datasets/SWoW/strength.SWOW-EN.R123.csv").get_all_associations()
+    swow_stren_graph = networkxFromTuples(swow_stren)
+    write_pajek(swow_stren_graph.graph, "D:/datasets/SWoW/swow_stren.net")
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 #     from networkx.algorithms.centrality.load import load_centrality
 #     from networkx.algorithms.centrality.betweenness import betweenness_centrality
 #     eat_loc = "C:/Users/Andrew/git/HumourDetection/HumourDetection/src/Data/eat/pajek/EATnew2.net"

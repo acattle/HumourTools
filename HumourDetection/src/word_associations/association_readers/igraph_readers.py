@@ -16,6 +16,7 @@ from math import log10
 from igraph import Graph, OUT, InternalError
 import sys
 
+#TODO: consts for "name", "id", "weight", and "-log weight"
 
 class AssociationIGraph:
     #eat_f = eat.graph.shortest_paths(eat_word, eat_token, weights="-log weight")[0][0]
@@ -45,20 +46,29 @@ class AssociationIGraph:
             :rtype: List[float]
         """
         
-        strengths = []
-        for a, b in word_pairs:
-            strength = 0
-            try:
-                #Finding the shortest path between nodes according to -log weight isequivalent to finding the maximal product path
-                #i.e. the path which maximizes the chain probability
-                #If no path exists, shortest_paths returns inf, and strength becomes 0
-                strength = 10.0 ** -(self.graph.shortest_paths(a.upper(), b.upper(), weights="-log weight", mode=OUT)[0][0])
-            except (InternalError, ValueError):
-                #one of the words is out-of-vocabulary
-                #fail silent and default to 0
-                pass
+        word_pairs = [(s.upper(), t.upper) for s, t in word_pairs] #node names are all uppercase
+    
+        sources = set()
+        targets = set()
+        vocab = set(self.graph.vs["name"])
+        for s, t in word_pairs:
+            if s in vocab:
+                sources.add(s)
+            if t in vocab:
+                targets.add(t)
             
-            strengths.append(strength)
+        sources = list(sources) #enforce consistent order
+        targets = list(targets)
+        s_map = {s:i for i, s in enumerate(sources)} #get indexes
+        t_map = {t:i for i, t in enumerate(targets)}
+        
+        #For large numbers of pairs, it's quicker to get all the paths at once than to get them one at a time
+        matrix = self.graph.shortest_paths(sources, targets, weights="-log weight", mode=OUT)
+        
+        strengths = []
+        for s, t in word_pairs:
+            neg_log_dist = matrix[s_map[s]][t_map[t]] if (s in s_map and t in t_map) else float("inf")
+            strengths.append(10**-neg_log_dist)
         
         return strengths
 
@@ -81,7 +91,13 @@ class EATIGraph(AssociationIGraph):
 class USFIGraph(AssociationIGraph):
     def __init__(self, usf_pajek_loc):
         #igraph
-        self.graph = Graph.Read_Pajek(usf_pajek_loc)
+        try:
+            self.graph = Graph.Read_Pajek(usf_pajek_loc)
+        except Exception as e:
+#             import sys;sys.path.append(r'/mnt/c/Users/Andrew/.p2/pool/plugins/org.python.pydev_6.2.0.201711281614/pysrc')
+#             import pydevd;pydevd.settrace(stdoutToServer=True, stderrToServer=True)
+#             print(e)
+            pass
         self.graph.vs["name"] = self.graph.vs["id"]#work around for bug: https://github.com/igraph/python-igraph/issues/86
         neg_log_proportions = []
         for e in self.graph.es:
@@ -101,22 +117,13 @@ def  iGraphFromTuples(association_tuples):
     :rtype: AssociationIGraph
     """
     
-    #get unique words
-    vocab = set()
-    for (s,r), _ in association_tuples:
-        vocab.add(s)
-        vocab.add(r)
-    vocab = list(vocab) #convert to ordered list
     
+    association_tuples = [(s.upper(),r.upper(),stren) for (s,r), stren in association_tuples]
+    graph = Graph.TupleList(association_tuples, edge_attrs="weight", directed=True)
     
-    graph = Graph(len(vocab), directed=True)
-    graph.vs["name"] = vocab #set vertex names
-    edges, _ = zip(*association_tuples)
-    graph.add_edges(edges)
+    graph.vs["id"] = graph.vs["name"]
     
     #add weights
-    for pair, stren in association_tuples:
-        graph[pair] = stren
     neg_log_proportions = []
     for e in graph.es:
         neg_log_proportions.append(-log10(e["weight"]))
@@ -163,7 +170,9 @@ def main():
         
     sources = list(sources)
     targets=list(targets)
-#
+#     sys.path.append(r'/mnt/c/Users/Andrew/.p2/pool/plugins/org.python.pydev_6.2.0.201711281614/pysrc') #import sys;
+#     import pydevd;pydevd.settrace(stdoutToServer=True, stderrToServer=True)
+    
 #     for strength in strengths:
 #     strengths = graph.get_association_strengths([(a.strip(),b.strip())])[0]
     matrix = graph.graph.shortest_paths(sources, targets, weights="-log weight", mode=OUT)
