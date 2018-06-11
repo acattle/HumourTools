@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from util.misc import mean
 import os
+import csv
 
 CONTROLLED = "controlled"
 MT_ALL = "mt_all"
@@ -83,14 +84,15 @@ class EvocationDataset(object):
     
 class SWoW_Dataset:
     """
-    Class for reading Small World of Words dataset from CSV
+    Class for reading Small World of Words responses dataset from CSV
+    and calcualting association strengths
     
     See https://smallworldofwords.org/en/project/research
     """
     
     def __init__(self, association_loc, complete=True):
         """
-        Read Small World of Words dataset in CSV format
+        Read Small World of Words response dataset in CSV format
         
         :param: association_loc: location of the SWoW csv
         :type: association_loc: str
@@ -106,30 +108,37 @@ class SWoW_Dataset:
         #SWOW-EN.complete columns
         cue_col = 11
         R123_cols = (15,16,17)
-        no_more_str = "\"No more responses\""
+        no_more_str = "No more responses"
         if  not complete:
             cue_col = 9
             R123_cols = (10,11,12)
             no_more_str = "NA"
         
         with open(association_loc, "r", encoding="utf-8") as f:
-            f.readline() #pop the header
+            reader = csv.reader(f)
             
-            for l in f:
-                l=l.split(",")
-                s = l[cue_col].strip()[1:-1] #remove quotes 
+            #verify header
+            header = next(reader)
+            if header[cue_col] != "cue":
+                raise RuntimeError(f"Expected 'cue' in column {cue_col}. Received '{header[cue_col]}'. Is SWoW format set correctly?")
+            for col, label in zip(R123_cols,["R1", "R2", "R3"]):
+                if header[col] != label:
+                    raise RuntimeError(f"Expected '{label}' in column {col}. Received '{header[col]}'. Is SWoW format set correctly?")
+            
+            for row in reader:
+                s = row[cue_col]
                 
                 self.vocab.add(s)
                 totals[s] = totals.get(s,0) + 1
                 
                 for i in R123_cols:
-                    r = l[i].strip()
+                    r = row[i]
                     
+                    #TODO: complete SWoW dataset includes "Unknown word" (and "unkown word") entries that seem to be auto-generated. Should we ignore them too?
                     if r == no_more_str:
                         #no more responses. Skip to next line
                         break
                     
-                    r= r[1:-1] #remove quotes
                     self.vocab.add(r)
                     counts[(s,r)] = counts.get((s,r), 0) + 1
         
@@ -142,10 +151,44 @@ class SWoW_Dataset:
         Return all SWoW associations as a tuple containing the cue and response (as a nested tuple) and strength
         
         :returns: list of tuples containing cue, response, and strength in that order
-        :rtype: List[Tuple[str,str,float]] 
+        :rtype: List[Tuple[Tuple[str,str],float]] 
         """
         return list(self.assoc_dict.items())
+
+class SWoW_Strengths_Dataset:
+    """
+    Class for reading precompiled Small World of Words strength dataset from CSV
+    
+    See https://smallworldofwords.org/en/project/research
+    """
+    
+    def __init__(self,association_loc):
+        """
+        Read Small World of Words strength dataset in CSV format
+        
+        :param: association_loc: location of the SWoW csv
+        :type: association_loc: str
+        """
+        
+        self.assoc_dict = {}
+        with open(association_loc, "r", encoding="utf-8") as f:
+            f.readline() #pop header
             
+            for l in f:
+                l=l.strip()
+                if l: #ignore empty final line
+                    cue, resp, _, _, stren = l.split("\t")
+                    
+                    self.assoc_dict[(cue, resp)] = float(stren)
+    
+    def get_all_associations(self):
+        """
+        Return all SWoW associations as a tuple containing the cue and response (as a nested tuple) and strength
+        
+        :returns: list of tuples containing cue, response, and strength in that order
+        :rtype: List[Tuple[Tuple[str,str],float]] 
+        """
+        return list(self.assoc_dict.items())
 
 class EAT_XML_Reader:
     """
