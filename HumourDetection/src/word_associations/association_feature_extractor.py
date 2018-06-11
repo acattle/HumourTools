@@ -753,13 +753,9 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
         self.logger.debug("dirrels done")
         
         
-        #failsafe. manke sure there's no nan or inf
-        #TODO: needed?
         feature_matrix = np.hstack(feature_vects)
-        feature_matrix[feature_matrix == np.inf] = 0
-        feature_matrix[feature_matrix == -np.inf] = 0
-        feature_matrix[feature_matrix == np.nan] = 0
-        
-        
+        #failsafe to ensure make sure there's no nan or inf that would hurt training
+        #np.nan_to_num won't work because the in/-inf values still hurt training
+        feature_matrix[np.logical_not(np.isfinite(feature_matrix))] = 0
         
         return feature_matrix
