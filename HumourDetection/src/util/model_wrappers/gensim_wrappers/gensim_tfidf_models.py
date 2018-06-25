@@ -11,7 +11,10 @@
 import logging
 from gensim.corpora import Dictionary
 from gensim.models import TfidfModel
+from functools import lru_cache
 
+_cache_size = None #Size of LRU cache. None means no limit
+#TODO: having an unlimited cache is fine if I'm only geting single words, but for large documents that can get expensive
 _models =  {} #holds models in form {model_name:GensimTfidfModel}
 #By using a module-level variables, we can easily share singleton-like instances across various other modules
 #See https://stackoverflow.com/questions/31875/is-there-a-simple-elegant-way-to-define-singletons
@@ -99,7 +102,7 @@ class GensimTFIDFModel(object):
         Convenience class for wrapping Gensim TFIDF models. Provides lazy
         loading functionality for more efficient memory management.
     """
-    def __init__(self, word_ids_loc, tfidf_model_loc, tokenizer=lambda x: x.split(), cache=True, lazy_load=True):
+    def __init__(self, word_ids_loc, tfidf_model_loc, tokenizer=lambda x: x.split(), lazy_load=True):
         """
             Initialize Gensim TFIDF model options
             
@@ -116,10 +119,6 @@ class GensimTFIDFModel(object):
         self.word_ids_loc = word_ids_loc
         self.tfidf_model_loc = tfidf_model_loc
         self.tokenize = tokenizer
-        
-        self._cache=None
-        if cache==True:
-            self._cache = {}
         
         self.id2word = None
         self.tfidf = None
@@ -157,6 +156,7 @@ class GensimTFIDFModel(object):
         self.id2word = None
         self.tfidf = None
     
+    @lru_cache(maxsize=_cache_size)
     def get_tfidf_vector(self, document):
         """
             Get TFIDF vector for document
@@ -168,16 +168,8 @@ class GensimTFIDFModel(object):
             :rtype: list
         """
         
-        tfidf_vector = None
-        
-        if (self._cache != None) and (document in self._cache):
-            tfidf_vector = self._cache[document]
-        else:
-            tokens = self.tokenize(document)
-            bow = self._get_id2word().doc2bow(tokens)
-            tfidf_vector =  self._get_tfidf()[bow]
-            
-            if self._cache != None:
-                self._cache[document] = tfidf_vector
+        tokens = self.tokenize(document)
+        bow = self._get_id2word().doc2bow(tokens)
+        tfidf_vector =  self._get_tfidf()[bow]
         
         return tfidf_vector

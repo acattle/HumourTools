@@ -5,19 +5,16 @@ Created on Jan 9, 2017
 '''
 from __future__ import print_function #for Python 2.7 compatibility
 from nltk.corpus import wordnet
+from functools import lru_cache
 import networkx
-import pickle
+
+_cache_size=None #Size of LRU cache. None means no limit
 
 class WordNetGraph(object):
     def __init__(self, cache=True):
         self.graph = networkx.Graph()
         for synset in wordnet.all_synsets():
             self._addAllRelations(synset)
-        self._cache=None
-        self._synset_cache=None
-        if cache:
-            self._cache = {}
-            self._synset_cache = {}
     
     def _addRelations(self, synset_name, relation):
         for related_synset in relation:
@@ -47,6 +44,11 @@ class WordNetGraph(object):
         #TODO: what about attributes/entailments?
         #TODO: what about lemma antonyms?
     
+    @lru_cache(maxsize=_cache_size)
+    def _get_neighbours(self,synset):
+        return self.graph[synset].keys()
+    
+    @lru_cache(maxsize=_cache_size)
     def _get_extended_neighbours(self, center_nodes, radius=3):
         """
             Get all the nodes within the specified radius of the central nodes
@@ -62,30 +64,16 @@ class WordNetGraph(object):
         #TODO: include/omit center?
         #TODO: handle edge weights?
         
-        center_nodes_str = str(center_nodes)            
-        if (self._cache != None) and (center_nodes_str in self._cache):
-            extended_neighbouhood = self._cache[center_nodes_str]
-            
-        else:
-            extended_neighbouhood = set(center_nodes)
-            processed_nodes = set() #set of already visited nodes
-            for _ in range(radius):
-                for synset in (extended_neighbouhood-processed_nodes): #For any node we haven't visited yet
-                    #add all synsets with and edge connecting it to this one
-                    #TODO: deal with 0 weight edges?
-                    if (self._synset_cache!=None) and (synset in self._synset_cache):
-                        neighbours = self._synset_cache[synset]
-                    else:
-                        neighbours = self.graph[synset].keys()
-                        
-                        if (self._synset_cache!=None):
-                            self._synset_cache[synset]=neighbours
-                    
-                    extended_neighbouhood.update(neighbours) 
-                    processed_nodes.add(synset)
+        extended_neighbouhood = set(center_nodes)
+        processed_nodes = set() #set of already visited nodes
+        for _ in range(radius):
+            for synset in (extended_neighbouhood-processed_nodes): #For any node we haven't visited yet
+                #add all synsets with and edge connecting it to this one
+                #TODO: deal with 0 weight edges?
+                neighbours = self._get_neighbours(synset)
                 
-            if (self._cache != None):
-                self._cache[center_nodes_str] = extended_neighbouhood
+                extended_neighbouhood.update(neighbours) 
+                processed_nodes.add(synset)
         
         return extended_neighbouhood
     

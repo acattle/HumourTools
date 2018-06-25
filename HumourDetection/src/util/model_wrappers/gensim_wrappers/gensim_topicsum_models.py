@@ -16,10 +16,13 @@ import numpy as np
 from gensim.matutils import cossim
 import logging
 from util.model_wrappers.gensim_wrappers.gensim_tfidf_models import load_gensim_tfidf_model
+from functools import lru_cache
 
 TYPE_LSI = "lsi"
 TYPE_LDA = "lda"
 
+_cache_size = None #Size of LRU cache. None means no limit
+#TODO: having an unlimited cache is fine if I'm only geting single words, but for large documents that can get expensive
 _models = {} #holds models in form {model_name:GensimTopicSumModel}
 #By using a module-level variables, we can easily share singleton-like instances across various other modules
 #See https://stackoverflow.com/questions/31875/is-there-a-simple-elegant-way-to-define-singletons
@@ -86,7 +89,7 @@ def get_gensim_topicsum_model(model_name):
     
     return _models[model_name]
 
-def purge_gensim_topicsum_model(model_name, purge_cache=True, purge_tfidf=True):
+def purge_gensim_topicsum_model(model_name, purge_tfidf=True):
     """
         Convenience method for removing model specified by model_name from
         memory.
@@ -96,8 +99,6 @@ def purge_gensim_topicsum_model(model_name, purge_cache=True, purge_tfidf=True):
         
         :param model_name: the name of the model to be returned
         :type model_name: str
-        :param purge_cache: whether the model cache should be purged too
-        :type purge_cache: bool
         :param purge_tfidf: whether the TFIDF model should be purged too
         :type purge_tfidf: bool
         
@@ -106,7 +107,7 @@ def purge_gensim_topicsum_model(model_name, purge_cache=True, purge_tfidf=True):
     if model_name not in _models:
         raise Exception("Model '{}' not currently loaded. Please call load_gensim_topicsum_model() first.".format(model_name))
     
-    _models[model_name]._purge_model(purge_cache, purge_tfidf)
+    _models[model_name]._purge_model(purge_tfidf)
 
 def purge_all_gensim_topicsum_models(purge_tfidf=True):
     """
@@ -162,28 +163,18 @@ class GensimTopicSumModel(object):
             :rtype: GensimTopicSumModel
         """
         self.tfidf_model = load_gensim_tfidf_model(tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer, cache, lazy_Load)
-            
-        self._cache=None
-        if cache==True:
-            self._cache = {}
-        
         self.model=None
     
     
-    def _purge_model(self, purge_cache=True, purge_tfidf=True):
+    def _purge_model(self, purge_tfidf=True):
         """
             Removes model from active memory but still allows for it to be read
             back from disk later (assuming the files have not moved)
             
-            :param purge_cache: whether the model cache should be purged too
-            :type purge_cache: bool
             :param purge_tfidf: whether the TFIDF model should be purged too
             :type purge_tfidf: bool
         """
         self.model = None
-        
-        if purge_cache and (self._cache != None):
-            self._cache = {}
         
         if purge_tfidf:
             self.tfidf_model._purge_model()
@@ -207,6 +198,7 @@ class GensimTopicSumModel(object):
         
         return vec
     
+    @lru_cache(maxsize=_cache_size)
     def get_topics(self, document):
         """
             Summarize document according to the topic summarization model.
@@ -217,15 +209,8 @@ class GensimTopicSumModel(object):
             :returns: a list of tuples containing the topic id and the topic score
             :rtype: List[Tuple[int,float]]
         """
-        topic_scores = None
-        if (self._cache != None) and (document in self._cache):
-            topic_scores = self._cache[document]
-        else:
-            tfidf_vector = self.tfidf_model.get_tfidf_vector(document)
-            topic_scores = self._get_model()[tfidf_vector]
-            
-            if self._cache != None:
-                self._cache[document] = topic_scores
+        tfidf_vector = self.tfidf_model.get_tfidf_vector(document)
+        topic_scores = self._get_model()[tfidf_vector]
             
         return topic_scores
     
@@ -344,6 +329,18 @@ if __name__ == "__main__":
     from util.model_wrappers.common_models import get_wikipedia_lda
     lda = get_wikipedia_lda()
     
+    tfidf_vector = lda.tfidf_model.get_tfidf_vector("the king wears a king hate and lives in the king house")
+    tuples = lda._get_model()[tfidf_vector]
+    tfidf_vector2 = lda.tfidf_model.get_tfidf_vector("your buildings are old and you may have lot of mimes")
+    tuples2 = lda._get_model()[tfidf_vector2]
+    vector1, vector2 = lda._convert_to_numpy_array(tuples), lda._convert_to_numpy_array(tuples2)
+    from timeit import timeit
+#     print(timeit('tfidf_vector = lda.tfidf_model.get_tfidf_vector(doc)\nt=lda._get_model()[tfidf_vector]', 'from __main__ import lda\ndoc="the king wears a king hate and lives in the king house"',number=1000))
+#     print(timeit('if doc in cache:\n    cache[doc]\nelse:\n    tfidf_vector = lda.tfidf_model.get_tfidf_vector(doc)\n    t=lda._get_model()[tfidf_vector]\n    cache[doc]=t', 'from __main__ import lda\ndoc="the king wears a king hate and lives in the king house"\ncache={}',number=1000))
+    print(timeit("cosine(vector1, vector2)", "from __main__ import lda, vector1, vector2\nfrom scipy.spatial.distance import cosine"))
+    print(timeit("cossim(tuples, tuples2)", "from __main__ import tuples, tuples2\nfrom gensim.matutils import cossim"))
+    print(timeit("dim,val = zip(*tuples)\nnumpy.array(val)", "from __main__ import tuples\nimport numpy"))
+    print(timeit("sparse2full(tuples, 300)", "from __main__ import tuples\nfrom gensim.matutils import sparse2full"))
     topic_vec = lda.get_vector("the king wears a king and lives in the king house")
     
     print("topic_vec shape? {}".format(topic_vec.shape))

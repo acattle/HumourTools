@@ -9,22 +9,34 @@
         and Humor Anchor Extraction. In EMNLP (pp. 2367-2376).
 '''
 from __future__ import print_function, division
-import re
 from nltk import pos_tag_sents, word_tokenize, sent_tokenize
 from nltk.corpus import cmudict, wordnet as wn
-import numpy as np
+from nltk.tree import Tree
 from math import log
-from itertools import combinations
+from itertools import combinations, product
 from sklearn.base import TransformerMixin
 from sklearn.exceptions import NotFittedError
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.neighbors import NearestNeighbors
 from humour_features.utils.common_features import get_alliteration_and_rhyme_features,\
     get_interword_score_features
-import logging
 from util.loggers import LoggerMixin
 from util.wordnet.treebank_to_wordnet import get_wordnet_pos
-from util.text_processing import default_filter_tokens, POS_TO_IGNORE, strip_pos
+from util.text_processing import default_filter_tokens, POS_TO_IGNORE, strip_pos,\
+    strip_pos_sent
+import re
+import numpy as np
+import logging
+
+
+from multiprocessing import Pool
+import time
+from _collections import defaultdict
+from functools import lru_cache
+from util.wordnet.wordnet_utils import get_synsets, path_similarity
+
+#Size of LRU caches. None means no limit
+_cache_size=None
 
 def train_yang_et_al_2015_pipeline(X, y, w2v_model_getter, wilson_lexicon_loc, k=5, pretagged=False, **rf_kwargs):
     """
@@ -128,24 +140,11 @@ class YangHumourFeatureExtractor(TransformerMixin, LoggerMixin):
         self.train_y = None #will be used for KNN features
         self.knn_vectorizer = None #will be used to transform documents into input for self.knn_model
         self.cmu_dict = cmudict.dict() #if we load this at init, it will save having to load it for each transform call
-        
         self.pretagged = pretagged
-        
-        self._sim_cache = None
-        self._synsets_cache = None
-        if cache:
-            self._sim_cache = {}
-            self._synsets_cache = {}
-        
         self.verbose_interval = 1000
         if verbose:
             self.logger.setLevel(logging.DEBUG)
     
-    def _purge_cache(self):
-        if self._sim_cache != None:
-            self._sim_cache = {}
-        if self._synsets_cache != None:
-            self._synsets_cache = {}
     
     def _get_wilson_lexicon(self):
         """
@@ -236,15 +235,7 @@ class YangHumourFeatureExtractor(TransformerMixin, LoggerMixin):
                 wn_pos = get_wordnet_pos(pos) # returns anrsv or empty string
                 
                 if wn_pos: #no use doing any of this unless we have a valid POS
-                    senses=[]
-                    _cache_key = (token, wn_pos)
-                    if self._synsets_cache and (_cache_key in self._synsets_cache):
-                        senses = self._synsets_cache[_cache_key]
-                    else:
-                        senses = wn.synsets(token, wn_pos)  #using empty string as pos makes this function return an empty set
-                        
-                        if self._synsets_cache != None:
-                            self._synsets_cache[_cache_key] = senses
+                    senses=get_synsets(token,wn_pos) #uses cached function
                     
                     if senses: #this avoids log(0) later
                         sense_product *= len(senses)
@@ -252,20 +243,9 @@ class YangHumourFeatureExtractor(TransformerMixin, LoggerMixin):
                         for s1 in senses:
                             if s1 not in word_senses: #avoid duplicating work
                                 #TODO: does this help?
-                                for s2 in word_senses:
-                                    s1_name = s1.name()
-                                    s2_name = s2.name()
-                                    _cache_key = (s1_name, s2_name) if s1_name < s2_name else (s2_name, s1_name)
-                                    #ensure sorted order since path_sim is symmetrical. tuple to make it hashable. Quicker than using a sort function
-                                    
-                                    #path_similarity is symmetric so reordering the synsets is OK
-                                    path_sim=None
-                                    if self._sim_cache and (_cache_key in self._sim_cache):
-                                        path_sim = self._sim_cache[_cache_key]
-                                    else:
-                                        path_sim = wn.path_similarity(s1,s2)
-                                        if self._sim_cache != None:
-                                            self._sim_cache[_cache_key] = path_sim
+                                for s2 in word_senses:                                    
+                                    #path_similarity is symmetric so reordering the synsets is OK and results in smaller cache
+                                    path_sim=path_similarity(sorted((s1,s2))) #uses a chached function
                                      
                                     if path_sim != None: #if  we have a path similarity
                                         #TODO: is this what Yang did?

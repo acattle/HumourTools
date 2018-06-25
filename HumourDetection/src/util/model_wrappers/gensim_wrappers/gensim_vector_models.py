@@ -19,7 +19,7 @@ _models = {} #holds models in form {model_name:GensimVectorModel}
 #By using a module-level variable, we can easily share singleton-like instances across various other modules
 #See https://stackoverflow.com/questions/31875/is-there-a-simple-elegant-way-to-define-singletons
 
-def load_gensim_vector_model(model_name, vector_loc, binary=True, lazy_load=True):
+def load_gensim_vector_model(model_name, vector_loc, binary=True, lazy_load=True, **kwargs):
     """
         Loads Gensim vector space model from Google-style vectors and stores it
         as a singleton-like instance.
@@ -35,6 +35,8 @@ def load_gensim_vector_model(model_name, vector_loc, binary=True, lazy_load=True
         :type binary: bool
         :param lazy_load: specifies whether the model should be lazy_loaded
         :type lazy_load: bool
+        :param kwargs: keyword arguments to be passed to Gensim
+        :type kwargs: dict
         
         :returns: the loaded model
         :rtype: GensimVectorModel
@@ -42,7 +44,7 @@ def load_gensim_vector_model(model_name, vector_loc, binary=True, lazy_load=True
     if model_name in _models:
         logging.info("'{}' already loaded. Will use existing instance.".format(model_name))
     else:
-        _models[model_name] = GensimVectorModel(vector_loc, binary)
+        _models[model_name] = GensimVectorModel(vector_loc, binary, lazy_load, **kwargs)
     
     return _models[model_name]
 
@@ -103,7 +105,7 @@ class GensimVectorModel():
     
     #TODO: set_vector_loc()?
     
-    def __init__(self, vector_loc, binary=True, lazy_load=True):
+    def __init__(self, vector_loc, binary=True, lazy_load=True, **kwargs):
         """
             Initialize options for a Gensim vector space model
             
@@ -113,9 +115,12 @@ class GensimVectorModel():
             :type binary: bool
             :param lazy_load: specifies whether the model should be lazy_loaded
             :type lazy_load: bool
+            :param kwargs: keyword arguments to be passed to Gensim
+            :type kwargs: dict
         """
         self.vector_loc = vector_loc
         self.binary = binary
+        self.kwargs = kwargs
         
         self.model = None
         if not lazy_load:
@@ -130,7 +135,7 @@ class GensimVectorModel():
         """
         if self.model == None:
             #http://mccormickml.com/2016/04/12/googles-pretrained-word2vec-model-in-python/
-            self.model = KeyedVectors.load_word2vec_format(self.vector_loc, binary=self.binary)
+            self.model = KeyedVectors.load_word2vec_format(self.vector_loc, binary=self.binary, **self.kwargs)
         return self.model
     
     def _purge_model(self):

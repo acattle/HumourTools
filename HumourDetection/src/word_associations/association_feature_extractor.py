@@ -4,20 +4,23 @@ Created on Jan 27, 2017
 @author: Andrew Cattle <acattle@cse.ust.hk>
 '''
 from __future__ import print_function, division #for Python 2.7 compatibility
-from nltk.corpus import wordnet as wn
 from extended_lesk import ExtendedLesk
 from sklearn.base import TransformerMixin
 from util.wordnet.wordnet_graph import WordNetGraph
-from util.wordnet.wordnet_utils import WordNetUtils
+from util.wordnet.wordnet_utils import get_lex_vector, wup_similarity,\
+    path_similarity, lch_similarity, get_synsets
 from util.misc import mean
+from util.loggers import LoggerMixin
 import numpy as np
 import pickle
 import re
-from util.loggers import LoggerMixin
 import logging
 
 #TODO: Add selective feature scaling (i.e. scale everything but vectors. Or should be scale vectors too?)
 #TODO: Add a lot of documentation
+
+_underscore_pat = re.compile("_")
+_space_pat = re.compile(" ")
 
 #Word embedding features
 FEAT_W2V_SIM = "Word2Vec Similarity"
@@ -229,11 +232,11 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
         return dimensions
     
     def _get_synsets(self,word):
-        return wn.synsets(self._space_to_underscore(word))
+        return get_synsets(self._space_to_underscore(word)) #uses cached function
     def _space_to_underscore(self, word):
-        return re.sub(" ", "_",word)
+        return _space_pat.sub("_",word)
     def _underscore_to_space(self, word):
-        return re.sub("_", " ",word)
+        return _underscore_pat.sub(" ",word)
     
     def fit(self,X, y=None):
         return self
@@ -597,16 +600,14 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
         lexvector_needed = FEAT_LEXVECTORS in self.features
         
         if wup_needed or path_needed or lch_needed or lexvector_needed:
-            wnu = WordNetUtils(cache=True)
-            
             total = len(stimuli_response_synsets)
             processed = 0
             for stimuli_synsets, response_synsets in stimuli_response_synsets:
                 feature_vect = []
                 
                 if lexvector_needed:
-                    feature_vect.append(wnu.get_lex_vector(stimuli_synsets))
-                    feature_vect.append(wnu.get_lex_vector(response_synsets))
+                    feature_vect.append(get_lex_vector(stimuli_synsets))
+                    feature_vect.append(get_lex_vector(response_synsets))
                 
                 wup_sims = []
                 path_sims = []
@@ -614,11 +615,11 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
                 for synset1 in stimuli_synsets:
                     for synset2 in response_synsets:
                         if wup_needed:
-                            wup_sims.append(wnu.wup_similarity_w_root(synset1, synset2))
+                            wup_sims.append(wup_similarity(synset1, synset2, simulate_root=True))
                         if path_needed:
-                            path_sims.append(wnu.path_similarity_w_root(synset1, synset2))
+                            path_sims.append(path_similarity(synset1, synset2, simulate_root=True))
                         if lch_needed:
-                            lch_sims.append(wnu.modified_lch_similarity_w_root(synset1, synset2))
+                            lch_sims.append(lch_similarity(synset1, synset2, simulate_root=True))
                 
                 #if no valid values exists, default to 0.0
                 if not wup_sims:
