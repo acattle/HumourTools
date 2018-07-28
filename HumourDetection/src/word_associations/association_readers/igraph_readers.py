@@ -46,7 +46,7 @@ class AssociationIGraph:
             :rtype: List[float]
         """
         
-        word_pairs = [(s.upper(), t.upper) for s, t in word_pairs] #node names are all uppercase
+        word_pairs = [(s.upper(), t.upper()) for s, t in word_pairs] #node names are all uppercase
     
         sources = set()
         targets = set()
