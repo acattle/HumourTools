@@ -48,8 +48,25 @@ class WordNetGraph(object):
     def _get_neighbours(self,synset):
         return self.graph[synset].keys()
     
-    @lru_cache(maxsize=_cache_size)
     def _get_extended_neighbours(self, center_nodes, radius=3):
+        """
+            Wrapper for self._get_extended_neighbours_cached(). Converts
+            center_nodes from unhashable lists to hashable tuples.
+            
+            Get all the nodes within the specified radius of the central nodes
+            
+            :param center_nodes: starting nodes for building the extended neighbourhood
+            :type center_nodes: list(str)
+            :param radius: the maximum radius to search for neighbours
+            :type radius: int
+            
+            :return: set of nodes within radius of center_nodes
+            :rtype: set(str)
+        """
+        return self._get_extended_neighbours_cached(tuple(center_nodes), radius)
+        
+    @lru_cache(maxsize=_cache_size)
+    def _get_extended_neighbours_cached(self, center_nodes, radius=3):
         """
             Get all the nodes within the specified radius of the central nodes
             
