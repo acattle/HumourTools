@@ -1,7 +1,7 @@
 '''
 Created on Jan 31, 2018
 
-@author: Andrew Cattle <acattle@cse.ust.hk>
+@author: Andrew Cattle <acattle@connect.ust.hk>
 
 A quick script for reading in a document and tokenizing it.
 '''
