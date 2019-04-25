@@ -9,3 +9,5 @@
 *.pickle
 *.txt
 *.log
+*.npz
+*.npy
