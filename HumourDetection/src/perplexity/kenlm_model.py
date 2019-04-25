@@ -1,7 +1,7 @@
 '''
 Created on Sep 18, 2016
 
-@author: Andrew Cattle <acattle@connect.ust.hk>
+@author: Andrew Cattle <acattle@cse.ust.hk>
 '''
 import subprocess
 from tempfile import TemporaryDirectory
