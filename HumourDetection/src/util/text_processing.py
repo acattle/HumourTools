@@ -1,7 +1,7 @@
 '''
 Created on Feb 6, 2018
 
-@author: Andrew Cattle <acattle@cse.ust.hk>
+@author: Andrew Cattle <acattle@connect.ust.hk>
 '''
 from nltk import word_tokenize, sent_tokenize
 from string import punctuation

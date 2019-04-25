@@ -1,7 +1,7 @@
 '''
     Created on Dec 20, 2017
 
-    :author: Andrew Cattle <acattle@cse.ust.hk>
+    :author: Andrew Cattle <acattle@connect.ust.hk>
     
     This module contains code for reading and using WordNet Domains
 '''

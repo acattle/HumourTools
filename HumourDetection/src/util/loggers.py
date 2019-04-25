@@ -1,7 +1,7 @@
 '''
 Created on Feb 5, 2018
 
-@author: Andrew Cattle <acattle@cse.ust.hk>
+@author: Andrew Cattle <acattle@connect.ust.hk>
 
 Utilities related to logging. Useful because logging.Logger instances can't be
 pickled natively.
