@@ -1,7 +1,7 @@
 '''
     Created on Jan 10, 2018
     
-    :author: Andrew Cattle <acattle@connect.ust.hk>
+    :author: Andrew Cattle <acattle@cse.ust.hk>
     
     This module contains convenience functions for saving and loading
     sklearn.pipeline.Pipeline objects which contain KerasClassifier or

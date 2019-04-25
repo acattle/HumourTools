@@ -1,7 +1,7 @@
 '''
 Created on Apr 8, 2017
 
-@author: Andrew Cattle <acattle@connect.ust.hk>
+@author: Andrew Cattle <acattle@cse.ust.hk>
 '''
 from __future__ import print_function #for Python 2.7 compatibility
 
