@@ -1,7 +1,7 @@
 '''
     Created on Dec 28, 2017
     
-    :author: Andrew Cattle <acattle@cse.ust.hk>
+    :author: Andrew Cattle <acattle@connect.ust.hk>
     
     Convenience methods for loading commonly used models 
 '''

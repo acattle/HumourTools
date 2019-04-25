@@ -1,7 +1,7 @@
 '''
     Created on Jan 24, 2018
     
-    @author: Andrew Cattle <acattle@cse.ust.hk>
+    @author: Andrew Cattle <acattle@connect.ust.hk>
     
     This module contains miscellaneous utility functions 
 '''

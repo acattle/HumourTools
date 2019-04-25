@@ -1,7 +1,7 @@
 '''
     Created on Dec 19, 2017
 
-    :author: Andrew Cattle <acattle@cse.ust.hk>
+    :author: Andrew Cattle <acattle@connect.ust.hk>
 
     This module implements the humour features described in Mihalcea and
     Strapparava (2005) and Mihalcea and Pulman (2007)

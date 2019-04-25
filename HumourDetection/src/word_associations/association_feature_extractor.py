@@ -1,7 +1,7 @@
 '''
 Created on Jan 27, 2017
 
-@author: Andrew Cattle <acattle@cse.ust.hk>
+@author: Andrew Cattle <acattle@connect.ust.hk>
 '''
 from __future__ import print_function, division #for Python 2.7 compatibility
 from extended_lesk import ExtendedLesk

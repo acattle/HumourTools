@@ -1,7 +1,7 @@
 '''
 Created on Jan 9, 2017
 
-@author: Andrew Cattle <acattle@cse.ust.hk>
+@author: Andrew Cattle <acattle@connect.ust.hk>
 '''
 import os
 

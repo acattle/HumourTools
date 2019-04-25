@@ -1,7 +1,7 @@
 '''
     Created on Jan 25, 2017
 
-    :author: Andrew Cattle <acattle@cse.ust.hk>
+    :author: Andrew Cattle <acattle@connect.ust.hk>
     
     This module provides a wrapper for Gensim vector space models. This allows
     models to fail silently when OOV words encountered as well as provides lazy

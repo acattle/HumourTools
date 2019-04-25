@@ -1,7 +1,7 @@
 '''
     Created on Jan 4, 2018
     
-    :author: Andrew Cattle <acattle@cse.ust.hk>
+    :author: Andrew Cattle <acattle@connect.ust.hk>
     
     This module provides a wrapper for Gensim TFIDF models. This lazy loading.
     

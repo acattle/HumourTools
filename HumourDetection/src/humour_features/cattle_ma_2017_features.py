@@ -1,7 +1,7 @@
 '''
 Created on Feb 3, 2018
 
-@author: Andrew Cattle <acattle@cse.ust.hk>
+@author: Andrew Cattle <acattle@connect.ust.hk>
 
 This module contains methods for exacting the features used in Cattle and Ma
 (2017)

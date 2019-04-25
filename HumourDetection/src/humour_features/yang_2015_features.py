@@ -1,7 +1,7 @@
 '''
     Created on Dec 13, 2017
 
-    :author: Andrew Cattle <acattle@cse.ust.hk>
+    :author: Andrew Cattle <acattle@connect.ust.hk>
 
     This module implements the humour features described in Yang et al. (2015).
 

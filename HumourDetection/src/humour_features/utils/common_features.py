@@ -1,7 +1,7 @@
 '''
     Created on Dec 19, 2017
 
-    :author: Andrew Cattle <acattle@cse.ust.hk>
+    :author: Andrew Cattle <acattle@connect.ust.hk>
 
     This module provides utility functions for extracting features which appear
     in multiple humour recognition papers
