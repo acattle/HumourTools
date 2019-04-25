@@ -247,6 +247,8 @@ if __name__ == "__main__":
     from string import punctuation
     from sklearn.ensemble.forest import RandomForestClassifier
     from sklearn.metrics import precision_recall_fscore_support, accuracy_score
+    from util.dataset_readers.potd_reader import read_raw_potd_data#, read_potd_data
+    from util.dataset_readers.oneliner_reader import read_16000_oneliner_data
     
     potd_loc = "D:/datasets/pun of the day/puns_pos_neg_data.csv"
     oneliners_pos = "D:/datasets/16000 oneliners/Jokes16000.txt"
@@ -255,41 +257,12 @@ if __name__ == "__main__":
     potd_neg = "D:/datasets/pun of the day/new_select.txt"
     proverbs = "D:/datasets/pun of the day/proverbs.txt"
     
-    potd_docs_and_labels=[]
-    potd2=[]
-    with open(potd_loc, "r") as pos_f: #potd_pos
-        pos_f.readline() #pop the header
-                  
-        for line in pos_f:
-            label, doc = line.split(",", maxsplit=1) #some document conatin commas
-            potd2.append((doc.split(), int(label)))
-    with open(potd_pos, "r") as pos_f:
-        pos_f.readline() #pop the header
-                 
-        for line in pos_f:
-            label, doc = line.split(",", maxsplit=1) #some document conatin commas
-            doc=doc.strip()[1:-1] #cut off quotation marks
-            potd_docs_and_labels.append((doc, 1)) #the labels in this file are incorrect. All are postive
-    with open(potd_neg, "r") as neg_f:
-        for line in neg_f:
-            potd_docs_and_labels.append((line.strip(), -1))
-    with open(proverbs, "r") as neg_f:
-        p = punc_re = re.compile(f'[{re.escape(punctuation)}]')
-        for line in neg_f:
-            line=line.strip().lower()
-            if len(p.sub(" ", line).split()) >5:
-                potd_docs_and_labels.append((line.strip(), -1))
-                #TODO: a couple documents are surrounded by quotes. Selectively remove them?
-    
-    oneliner_docs_and_labels = []
-    with open(oneliners_pos, "r", encoding="ansi") as ol_pos_f:
-        for line in ol_pos_f:
-            oneliner_docs_and_labels.append((line.strip(),1))
-    with open(oneliners_neg, "r", encoding="ansi") as ol_neg_f:
-        for line in ol_neg_f:
-            oneliner_docs_and_labels.append((line.strip(),-1))
-    
-    
+    potd_docs_and_labels= read_raw_potd_data(potd_pos, potd_neg, proverbs)
+#     potd2 = read_potd_data(potd_loc)  
+       
+    oneliner_docs_and_labels = read_16000_oneliner_data(oneliners_pos, oneliners_neg)
+       
+       
 #     for r, t in zip(potd_docs_and_labels[:len(potd2)], potd2):
 #         if r[1] == -1:
 #             print("neg")
@@ -299,14 +272,13 @@ if __name__ == "__main__":
 #     
 #     for d in potd_docs_and_labels[len(potd2):]:
 #         print(d)
-    
-    docs_and_labels = potd_docs_and_labels
-    
+       
+       
     import random
     random.seed(10)
-    random.shuffle(docs_and_labels)
+    random.shuffle(potd_docs_and_labels)
+    random.shuffle(oneliner_docs_and_labels)
     
-    docs, labels = zip(*docs_and_labels)
     from util.text_processing import default_preprocessing_and_tokenization
 #     docs = default_preprocessing_and_tokenization(docs) #Remove stopwords
 #     docs = default_preprocessing_and_tokenization(docs, stopwords=[])

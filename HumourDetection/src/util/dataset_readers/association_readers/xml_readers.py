@@ -9,10 +9,32 @@ from util.misc import mean
 import os
 import csv
 
+#WordNet Evocation constants
 CONTROLLED = "controlled"
 MT_ALL = "mt_all"
 MT_MOST = "mt_most"
 MT_SOME = "mt_some"
+
+#SWoW constants
+R1 = "r1"
+R2 = "r2"
+R3 = "r3"
+ALL = "all"
+_VALID_RESPS = set([ALL, R1, R2, R3])
+_COMP_RESP_INDEXES = {ALL: (15,16,17),
+                         R1: (15,),
+                         R2: (16,),
+                         R3: (17,)
+                         }
+_COMP_CUE_INDEX = 11
+_COMP_NO_MORE_RESP = "No more responses".lower()
+_R100_RESP_INDEXES = {ALL: (10,11,12),
+                     R1: (10,),
+                     R2: (11,),
+                     R3: (12,)
+                     }
+_R100_CUE_INDEX = 9
+_R100_NO_MORE_RESP = "NA".lower()
 
 class EvocationDataset(object):
     """
@@ -80,7 +102,7 @@ class EvocationDataset(object):
             @return A list of tuples representing (first synset, second synset, evocation score as a probability)
             @rtype List[Tuple[Tuple[str, str], float]]
         """
-        return self.evocation.items()
+        return list(self.evocation.items())
     
 class SWoW_Dataset:
     """
@@ -90,7 +112,7 @@ class SWoW_Dataset:
     See https://smallworldofwords.org/en/project/research
     """
     
-    def __init__(self, association_loc, complete=True):
+    def __init__(self, association_loc, complete=True, probs=True, response_types=ALL):
         """
         Read Small World of Words response dataset in CSV format
         
@@ -98,41 +120,50 @@ class SWoW_Dataset:
         :type: association_loc: str
         :param: complete: Specifies whether file at association_loc is the "complete" or "R100" version
         :type: complete: bool
+        :param probs: Specifies whether the reported returned weights should be converted to probabilities
+        :type probs: bool
+        :param response_types: Specifies the types of responses to be considered. Response types are "R1", "R2", "R3", or "all". If None, all responses will be considered
+        :type response_types: str or Iterable[str]
         """
+        
+        #Identify whcih CSV columns we want to take responses from
+        resp_indexes = _COMP_RESP_INDEXES if complete else _R100_RESP_INDEXES
+        response_cols = set()
+        response_types = response_types if response_types != None else ALL
+        if isinstance(response_types, str):
+            response_types = [response_types]
+        for t in sorted(response_types):
+            t=t.lower()
+            if t not in _VALID_RESPS:
+                raise ValueError(f"Unknown response_types argument: {t}")
+            response_cols.update(resp_indexes[t])
+        response_cols=list(sorted(response_cols))
         
         totals = {}
         counts = {}
         self.vocab = set()
         self.assoc_dict = {}
         
-        #SWOW-EN.complete columns
-        cue_col = 11
-        R123_cols = (15,16,17)
-        no_more_str = "No more responses"
-        if  not complete:
-            cue_col = 9
-            R123_cols = (10,11,12)
-            no_more_str = "NA"
+        #get the cue column index by SWoW distribution
+        cue_index = _COMP_CUE_INDEX if complete else _R100_CUE_INDEX
+        no_more_str = _COMP_NO_MORE_RESP if complete else _R100_NO_MORE_RESP
         
         with open(association_loc, "r", encoding="utf-8") as f:
             reader = csv.reader(f)
             
             #verify header
             header = next(reader)
-            if header[cue_col] != "cue":
-                raise RuntimeError(f"Expected 'cue' in column {cue_col}. Received '{header[cue_col]}'. Is SWoW format set correctly?")
-            for col, label in zip(R123_cols,["R1", "R2", "R3"]):
-                if header[col] != label:
-                    raise RuntimeError(f"Expected '{label}' in column {col}. Received '{header[col]}'. Is SWoW format set correctly?")
-            
+            if header[cue_index] != "cue":
+                raise RuntimeError(f"Expected 'cue' in column {cue_index}. Received '{header[cue_index]}'. Is SWoW format set correctly?")
+
             for row in reader:
-                s = row[cue_col]
+                c = row[cue_index]#.lower()
                 
-                self.vocab.add(s)
-                totals[s] = totals.get(s,0) + 1
+                self.vocab.add(c)
+                totals[c] = totals.get(c,0) + 1
                 
-                for i in R123_cols:
-                    r = row[i]
+                for i in response_cols:
+                    r = row[i]#.lower()
                     
                     #TODO: complete SWoW dataset includes "Unknown word" (and "unkown word") entries that seem to be auto-generated. Should we ignore them too?
                     if r == no_more_str:
@@ -140,11 +171,15 @@ class SWoW_Dataset:
                         break
                     
                     self.vocab.add(r)
-                    counts[(s,r)] = counts.get((s,r), 0) + 1
+                    counts[(c,r)] = counts.get((c,r), 0) + 1
         
-        self.assoc_dict = {}  
-        for (s,r), count in counts.items():
-            self.assoc_dict[(s,r)] = count / totals[s]
+        
+        self.assoc_dict = {}
+        if probs:
+            for (s,r), count in counts.items():
+                self.assoc_dict[(s,r)] = count / totals[s]
+        else:
+            self.assoc_dict = counts
     
     def get_all_associations(self):
         """

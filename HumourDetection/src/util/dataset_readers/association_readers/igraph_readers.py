@@ -1,7 +1,7 @@
 '''
 Created on Feb 7, 2018
 
-@author: Andrew Cattle <acattle@cse.ust.hk>
+@author: Andrew Cattle <acattle@connect.ust.hk>
 
 This module contains methods for reading and working with word association files
 using the IGraph library.
@@ -71,6 +71,27 @@ class AssociationIGraph:
             strengths.append(10**-neg_log_dist)
         
         return strengths
+        
+        
+        
+        
+        
+#         strengths = []
+#         for a, b in word_pairs:
+#             strength = 0
+#             try:
+#                 #Finding the shortest path between nodes according to -log weight isequivalent to finding the maximal product path
+#                 #i.e. the path which maximizes the chain probability
+#                 #If no path exists, shortest_paths returns inf, and strength becomes 0
+#                 strength = 10.0 ** -(self.graph.shortest_paths(a.upper(), b.upper(), weights="-log weight", mode=OUT)[0][0])
+#             except (InternalError, ValueError):
+#                 #one of the words is out-of-vocabulary
+#                 #fail silent and default to 0
+#                 pass
+#             
+#             strengths.append(strength)
+#         
+#         return strengths
 
 class EATIGraph(AssociationIGraph):
     def __init__(self, eat_pajek_loc):
@@ -117,13 +138,29 @@ def  iGraphFromTuples(association_tuples):
     :rtype: AssociationIGraph
     """
     
+#     #get unique words
+#     vocab = set()
+#     uppercase_tuples = []
+#     for (s,r), stren in association_tuples:
+#         uppercase_tuples.append((s.upper(), r.upper(), stren))
+#         vocab.update(word_pair)
     
-    association_tuples = [(s.upper(),r.upper(),stren) for (s,r), stren in association_tuples]
-    graph = Graph.TupleList(association_tuples, edge_attrs="weight", directed=True)
+#     vocab = list(vocab) #convert to ordered list
+#     
+#     
+#     graph = Graph(len(vocab), directed=True)
+#     graph.vs["name"] = vocab #set vertex names
+#     edges, _ = zip(*association_tuples)
+#     graph.add_edges(edges)
+    #association_tuples = [(s.upper(),r.upper(),stren) for (s,r), stren in association_tuples]
+    association_tuples = [(s,r,stren) for (s,r), stren in association_tuples]
+    graph = Graph.TupleList(association_tuples, directed=True, weights=True)
     
     graph.vs["id"] = graph.vs["name"]
     
     #add weights
+#     for s, r , stren in association_tuples:
+#         graph[(s,r)] = stren
     neg_log_proportions = []
     for e in graph.es:
         neg_log_proportions.append(-log10(e["weight"]))
@@ -138,6 +175,9 @@ def  iGraphFromTuples(association_tuples):
 def main():
     USF = "usf"
     EAT = "eat"
+    
+#     import sys;sys.path.append(r'/mnt/c/Users/Andrew/.p2/pool/plugins/org.python.pydev_6.2.0.201711281614/pysrc')
+#     import pydevd;pydevd.settrace(stdoutToServer=True, stderrToServer=True)
     
     try:
         dataset = sys.argv[1]
@@ -159,6 +199,7 @@ def main():
     word_pairs = []
     sources = set()
     targets = set()
+#     with open("/mnt/d/temp/tmptbpj6u9o/word_pairs", "r") as f:
     for line in sys.stdin:
         a,b = line.split("\t")
         a, b = a.strip().upper(), b.strip().upper()
@@ -170,6 +211,7 @@ def main():
         
     sources = list(sources)
     targets=list(targets)
+    
 #     sys.path.append(r'/mnt/c/Users/Andrew/.p2/pool/plugins/org.python.pydev_6.2.0.201711281614/pysrc') #import sys;
 #     import pydevd;pydevd.settrace(stdoutToServer=True, stderrToServer=True)
     
@@ -185,7 +227,21 @@ def main():
         print(10**-dist)
 
 if __name__=="__main__":
-    main()
+#     main()
+    
+    from word_associations.association_readers.xml_readers import SWoW_Dataset,SWoW_Strengths_Dataset
+    swow_all = SWoW_Dataset("D:/datasets/SWoW/SWOW-EN.complete.csv").get_all_associations()
+    swow_all_graph = iGraphFromTuples(swow_all)
+    swow_all_graph.graph.write_pajek("D:/datasets/SWoW/swow_all.net")
+    
+    swow_100 = SWoW_Dataset("D:/datasets/SWoW/SWOW-EN.R100.csv",complete=False).get_all_associations()
+    swow_100_graph = iGraphFromTuples(swow_100)
+    swow_100_graph.graph.write_pajek("D:/datasets/SWoW/swow_100.net")
+    
+    swow_stren = SWoW_Strengths_Dataset("D:/datasets/SWoW/strength.SWOW-EN.R123.csv").get_all_associations()
+    swow_stren_graph = iGraphFromTuples(swow_stren)
+    swow_stren_graph.graph.write_pajek("D:/datasets/SWoW/swow_stren.net")
+
 #     from time import strftime
 #     import pickle
 #     import numpy as np
