@@ -12,7 +12,7 @@ from nltk.corpus import cmudict
 from util.misc import mean
 from util.text_processing import get_word_pairs
 
-def get_interword_score_features(documents, scorer, token_filter=None):
+def get_interword_score_features(documents, scorer, token_filter=None, pair_generator=None):
     """
         A convenience wrappper for obtaining min, max, and micro average scores
         between all word pairs in a document, according to the supplied scorer
@@ -31,12 +31,16 @@ def get_interword_score_features(documents, scorer, token_filter=None):
         :type scorer: Callable[[str, str], Number]
         :param token_filter: function for filtering the tokens in a document. If None, no token filtering will be done
         :type token_filter: Callable[[Iterable[str]], Iterable[str]]
+        :param pair_generator: function for generating word pairs. Must take list of documents (as a list of tokens) and a token_filter fucntion. If None, default word pair generator will be used.
+        :type pair_generator: Callable[[Iterable[str], Callable[[Iterable[str]], Iterable[str]]], List[List[Tuple[str, str]]]]
         
         :return: A matrix in the form (min_score, avg_score, max_score) x # of documents
         :rtype: numpy.array
     """
     
-    documents = get_word_pairs(documents, token_filter)
+    if not pair_generator:
+        pair_generator = get_word_pairs
+    documents = pair_generator(documents, token_filter)
 
     feature_vectors = []
     for document in documents:
@@ -104,8 +108,10 @@ def get_alliteration_and_rhyme_features(documents, cmu_dict=None):
                         #go backwards through the pronunciation until we find the final vowel
                         if phoneme[0] in "AEIOU": #check the first letter of the phoneme to see if it's a vowel
                             break #then stop looking but make note of the vowel's index
-                        
-                    end_rhymes.add("".join(pronunciation[i:])) #concatenate the final vowel with any codas
+                    
+                    end_rhymes.add("".join(pronunciation[i])) #concatenate the final vowel only
+                    #TODO: uncomment
+#                     end_rhymes.add("".join(pronunciation[i:])) #concatenate the final vowel with any codas
                 
                 for first_phoneme in first_phonemes:
                     #iterate count for each possible first phoneme

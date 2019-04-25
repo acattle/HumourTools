@@ -139,8 +139,11 @@ def _shortest_path_distance(synset1, synset2, simulate_root=False):
 
 
 ############################## Modified functions ##############################
-
 def get_lex_vector(synsets):
+    return _get_lex_vector(tuple(synsets))
+
+@lru_cache(_cache_size)
+def _get_lex_vector(synsets):
     pos_vector = np.zeros(len(_pos))
     lex_vector = np.zeros(len(_lexnames))
     for synset in synsets:

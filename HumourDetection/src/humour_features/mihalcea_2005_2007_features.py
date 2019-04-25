@@ -23,7 +23,7 @@ from humour_features.utils.common_features import get_alliteration_and_rhyme_fea
 from humour_features.utils.wordnet_domains import WordNetDomains
 from sklearn.base import TransformerMixin
 from sklearn.exceptions import NotFittedError
-from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import CountVectorizer#, TfidfTransformer, TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm.classes import LinearSVC
 from sklearn.pipeline import Pipeline
@@ -92,8 +92,17 @@ def run_mihalcea_strapparava_2005_baseline(train, test, wnd_loc, content_model="
     X, y = train
     mihalcea2005_pipeline = train_mihalcea_strapparava_2005_pipeline(X, y, wnd_loc, content_model)
     
+#     from sklearn.neighbors import KNeighborsClassifier
+    from sklearn.model_selection import cross_val_predict
+#     mihalcea2005_pipeline = Pipeline([("feature_extraction", MihalceaFeatureExtractor(wnd_loc, content_model)),
+#                                       ("scale", StandardScaler()),
+#                                       ("knn_classifier", KNeighborsClassifier())
+#                                       ])
+    
     test_X, test_y = test
     pred_y = mihalcea2005_pipeline.predict(test_X)
+#     pred_y = cross_val_predict(mihalcea2005_pipeline, test_X, test_y, cv=10)
+#     test_y = y
     
     from sklearn.metrics import precision_recall_fscore_support, accuracy_score
     p,r,f,_ = precision_recall_fscore_support(test_y, pred_y, average="binary")
@@ -103,6 +112,20 @@ def run_mihalcea_strapparava_2005_baseline(train, test, wnd_loc, content_model="
     print("Precision: {}".format(p))
     print("Recall: {}".format(r))
     print("F-Score: {}".format(f))
+    
+    
+    
+    
+# #     print(mihalcea2005_pipeline.named_steps["feature_extraction"].content_model.named_steps["count_vector"].transform(["when peter pan punches they neverland".split()]))
+#      
+#     content_pred = mihalcea2005_pipeline.named_steps["feature_extraction"].get_content_features(test_X).flatten()
+#     p,r,f,_ = precision_recall_fscore_support(test_y, content_pred, average="binary")
+#     a = accuracy_score(test_y, content_pred)
+#     print("\ncontent feature only")
+#     print("Accuracy: {}".format(a))
+#     print("Precision: {}".format(p))
+#     print("Recall: {}".format(r))
+#     print("F-Score: {}".format(f))
 
 def run_mihalcea_pulman_2007_baseline(train,test):
     """
@@ -271,7 +294,8 @@ class MihalceaFeatureExtractor(TransformerMixin):
             :raises ValueError: if specified content model type is not "nb" or "svm"
         """
         
-        steps =[("count_vector", CountVectorizer(tokenizer=lambda x:  x, preprocessor=lambda x: x))] #skip tokenization and preporcessing
+        steps =[("count_vector", CountVectorizer(tokenizer=lambda x:  x, preprocessor=lambda x: x))]#,
+#                  ("tfidf", TfidfTransformer())] #skip tokenization and preporcessing
         
         if self.content_model_type == "nb":
             steps.append(("naive_bayes", MultinomialNB())) #Multinomal, as specified in Mihalcea and Strapparava (2005)

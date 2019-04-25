@@ -8,7 +8,7 @@ import re
 from selenium.common.exceptions import NoSuchElementException
 from time import sleep, strftime
 from math import log
-from urllib import quote
+from urllib.parse import quote
 # from pymongo import MongoClient
 from numpy import mean
 import os
@@ -18,17 +18,17 @@ from nltk.corpus import stopwords
 from multiprocessing.pool import Pool
 
 def getResultCount(query, driver=None):
-    def get_count_from_page(driver, query_url):
-        if driver == None:
-            driver = webdriver.Chrome("C:/chromedriver.exe")
-        driver.get(queryURL)
-        sleep(2)
-        
-        resultStats = driver.find_element_by_id("resultStats").text
-        countStr = re.search(r"[\d,]+", resultStats).group(0)
-        countStr = countStr.replace(",", "")
-        resultCount = float(countStr)
-        return resultCount
+#     def get_count_from_page(driver, query_url):
+#         if driver == None:
+#             driver = webdriver.PhantomJS("C:/phantomjs.exe")
+#         driver.get(queryURL)
+#         sleep(2)
+#         
+#         resultStats = driver.find_element_by_id("resultStats").text
+#         countStr = re.search(r"[\d,]+", resultStats).group(0)
+#         countStr = countStr.replace(",", "")
+#         resultCount = float(countStr)
+#         return resultCount
         
     query = quote(query.encode("utf-8")) #needed for googling hashtags
     #encoding because urllib can't handle unicode. google will fix the decoding issue for us.
@@ -42,16 +42,16 @@ def getResultCount(query, driver=None):
         while True:
             try:
                 if driver == None:
-                    driver = webdriver.Chrome("C:/chromedriver.exe")
+                    driver = webdriver.PhantomJS("C:/phantomjs.exe")
                 driver.get(queryURL)
-                sleep(2)
+                sleep(1)
             
                 resultStats = driver.find_element_by_id("resultStats").text
                 countStr = re.search(r"[\d,]+", resultStats).group(0)
                 countStr = countStr.replace(",", "")
                 resultCount = float(countStr)
                 break
-            except Exception, e:
+            except Exception as e:
                 tries+=1
                 if tries % change_url == 0: #if we've tried change_url number of times
                     queryURL=u"http://google.com/#q={}&start=10".format(query)
@@ -61,9 +61,9 @@ def getResultCount(query, driver=None):
                     #so it's a last ditch effort
                 if tries > max_tries:
                     raise e
-                print "error getting {}. {} retires remaining".format(query, max_tries-tries)
+                print("error getting {}. {} retries remaining".format(query, max_tries-tries))
     except NoSuchElementException:
-        print "ERROE NoSuchElement for {} after {} tries. Assume it's a true 0".format(query, max_tries)
+        print("ERROR NoSuchElement for {} after {} tries. Assume it's a true 0".format(query, max_tries))
         resultCount = 0
 
     return resultCount
@@ -73,7 +73,7 @@ def getNormalizedGoogleDistance(x, y, driver=None, x_count=None, y_count=None):
     #(max(log f(x), log f(y)) - log f(x,y))/(log N - min(log f(x), log f(y)))
     
     if driver == None:
-        driver = webdriver.Chrome("C:/chromedriver.exe")
+        driver = webdriver.PhantomJS("C:/phantomjs.exe")
     
     ngd=None
     try:
@@ -89,8 +89,8 @@ def getNormalizedGoogleDistance(x, y, driver=None, x_count=None, y_count=None):
         log_fxy = log(xy_count)
         
         ngd = (max(log_fx, log_fy) - log_fxy)/(log_N - min(log_fx, log_fy))
-    except ValueError,e:
-        print e
+    except ValueError as e:
+        print(e)
         #one of the counts was probably 0
         #NGD is undefined
         pass
@@ -131,8 +131,12 @@ pos_to_ignore = ["D","P","X","Y", "T", "&", "~", ",", "!", "U", "E"]
 def process_file(filename):
     driver=None
     try:
-        driver = webdriver.Firefox(executable_path="C:/geckodriver.exe")
-#         driver = webdriver.Chrome("C:/chromedriver.exe")
+#         options = webdriver.FirefoxOptions()
+#         options.add_argument("-headless")
+#         driver = webdriver.Firefox(executable_path="C:/geckodriver.exe", firefox_options=options)
+        options = webdriver.ChromeOptions()
+        options.add_argument("headless")
+        driver = webdriver.Chrome(chrome_options=options)
         sleep(3)
         
         name = os.path.splitext(os.path.basename(filename))[0]
@@ -145,7 +149,7 @@ def process_file(filename):
         hashtag_words = [word for word in hashtag_words if not ((len(word) == 1) and (word.isdigit()))]
         hashtag_words = [word for word in hashtag_words if word != "words"]
         
-        print "{}\tprocessing {}".format(strftime("%y-%m-%d_%H:%M:%S"),name)
+        print("{}\tprocessing {}".format(strftime("%y-%m-%d_%H:%M:%S"),name))
         tweet_ids = []
         tweet_tokens = []
         tweet_pos = []
@@ -170,14 +174,14 @@ def process_file(filename):
                     for line in resume_file:
                         line_split = line.split("\t")
                         if len(line_split) != (len(hashtag_words) +2): #if we don't have enough columns
-                            print u"ERROR - previously collected tweet is incomplet: {}".format(line)
+                            print("ERROR - previously collected tweet is incomplet: {}".format(line))
                             continue
                         
                         tweet_id = line_split[0]
                         max_val = line_split[1].split()[2]
                         
                         if max_val == "inf":
-                            print u"Tweet {} has an inf value. Will retry".format(tweet_id)
+                            print("Tweet {} has an inf value. Will retry".format(tweet_id))
                             continue
                         
                         already_collected.add(tweet_id)
@@ -210,7 +214,7 @@ def process_file(filename):
                         ngds_by_hashtag_word.append(ngd)
                         
                     if len(ngds_by_hashtag_word) == 0:
-                        print u"ERRORL no valid tokens\t{}".format(u" ".join(tokens))
+                        print("ERRORL no valid tokens\t{}".format(u" ".join(tokens)))
                         ngds_by_hashtag_word = [float("inf")]
                     
                     
@@ -226,8 +230,8 @@ def process_file(filename):
                 out_file.write(line)
                 done+=1
                 if done % 20 == 0:
-                    print "{}\t{}\t{} of {} completed".format(strftime("%y-%m-%d_%H:%M:%S"), name, done, len(tweet_ids))
-        print "{}\tfinished {}".format(strftime("%y-%m-%d_%H:%M:%S"),name)
+                    print("{}\t{}\t{} of {} completed".format(strftime("%y-%m-%d_%H:%M:%S"), name, done, len(tweet_ids)))
+        print("{}\tfinished {}".format(strftime("%y-%m-%d_%H:%M:%S"),name))
         return True
     finally:
         if driver != None:
@@ -235,7 +239,7 @@ def process_file(filename):
     
 if __name__ == '__main__':
 #     client = MongoClient()
-#     driver = webdriver.Chrome("C:/chromedriver.exe")
+#     driver = webdriver.PhantomJS("C:/phantomjs.exe")
 #     driver = webdriver.Firefox()
 #     sleep(3)
     
@@ -290,7 +294,7 @@ if __name__ == '__main__':
 #     driver.close()
 
 
-    semeval_dir = r"C:/Users/Andrew/Desktop/SemEval Data"
+    semeval_dir = r"D:/datasets/SemEval Data"
     dirs = [r"trial_dir/trial_data",
             r"train_dir/train_data",
             r"evaluation_dir/evaluation_data"]
@@ -304,10 +308,10 @@ if __name__ == '__main__':
             filenames.append(os.path.join(semeval_dir, d, tagged_dir,f))
     
 #     process_file(os.path.join(semeval_dir,r"trial_dir\trial_data",tagged_dir,"Fast_Food_Books.tsv" ))
-    p=Pool(8)
+    p=Pool(4)
     res = p.map(process_file, filenames)
      
     for r, f in zip(res,filenames):
-        print "{} {}".format(f,r)
+        print("{} {}".format(f,r))
     
     

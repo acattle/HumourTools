@@ -14,6 +14,7 @@
 from gensim.models import KeyedVectors
 import numpy as np
 import logging
+from functools import lru_cache
 
 _models = {} #holds models in form {model_name:GensimVectorModel}
 #By using a module-level variable, we can easily share singleton-like instances across various other modules
@@ -173,7 +174,8 @@ class GensimVectorModel():
             vector = np.zeros(self.get_dimensions())
         return vector
     
-    def get_similarity(self, word1, word2):
+    @lru_cache(maxsize=None)
+    def get_similarity(self, word1, word2, default=0.0):
         """
             Get the cosine similarity between vectors corresponding to word1
             and word2.
@@ -182,11 +184,13 @@ class GensimVectorModel():
             :type word1: str
             :param word2: the second word to compare
             :type word2: str
+            :param: default: the default value to return is either word1 or word2 is OOV
+            :type default: float of None
             
             :returns: the cosine similarity between word1 and word2
             :rtype: float
         """
-        similarity = 0.0
+        similarity = default
         try:
             similarity = self._get_model().similarity(word1, word2)
         except KeyError:

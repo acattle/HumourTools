@@ -27,7 +27,7 @@ _models = {} #holds models in form {model_name:GensimTopicSumModel}
 #By using a module-level variables, we can easily share singleton-like instances across various other modules
 #See https://stackoverflow.com/questions/31875/is-there-a-simple-elegant-way-to-define-singletons
 
-def load_gensim_topicsum_model(model_name, model_type, model_loc, tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer=lambda x: x.split(), cache=True, lazy_load=True):
+def load_gensim_topicsum_model(model_name, model_type, model_loc, tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer=lambda x: x.split(), lazy_load=True):
     """
         Loads Gensim topic summarization model disk from and stores it as
         a singleton-like instance.
@@ -49,8 +49,6 @@ def load_gensim_topicsum_model(model_name, model_type, model_loc, tfidf_model_na
         :type tfidf_model_loc: str
         :param tokenizer: the document tokenization function. Must take a single str argument and return a list of strs
         :type tokenizer: Callable[[str], List[str]]
-        :param cache: specifies whether doc summary results should be cached
-        :type cache: bool
         :param lazy_load: specifies whether the model should be lazy_loaded
         :type lazy_load: bool
         
@@ -64,9 +62,9 @@ def load_gensim_topicsum_model(model_name, model_type, model_loc, tfidf_model_na
     else:
         model_type = model_type.lower()
         if model_type == TYPE_LSI:
-            _models[model_name] = GensimLSIModel(model_loc, tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer, cache, lazy_load)
+            _models[model_name] = GensimLSIModel(model_loc, tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer, lazy_load)
         elif model_type == TYPE_LDA:
-            _models[model_name] = GensimLDAModel(model_loc, tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer, cache, lazy_load)
+            _models[model_name] = GensimLDAModel(model_loc, tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer, lazy_load)
         else:
             raise ValueError("Unknown Gensim Topic Summarization Model type '{}'".format(model_type))
         
@@ -139,7 +137,7 @@ class GensimTopicSumModel(object):
     
     #TODO: use setters to change where to look for model on disk?
     
-    def __init__(self, tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer=lambda x: x.split(), cache=True, lazy_Load=True):
+    def __init__(self, tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer=lambda x: x.split(), lazy_Load=True):
         """
             Initialize common options for a Gensim topic summarization models.
             
@@ -154,15 +152,13 @@ class GensimTopicSumModel(object):
             :type tfidf_model_loc: str
             :param tokenizer: the document tokenization function. Must take a single str argument and return a list of strs
             :type tokenizer: function(str)
-            :param cache: specifies whether doc summary results should be cached
-            :type cache: bool
             :param lazy_load: specifies whether the model should be lazy_loaded
             :type lazy_load: bool
             
             :returns: the loaded model
             :rtype: GensimTopicSumModel
         """
-        self.tfidf_model = load_gensim_tfidf_model(tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer, cache, lazy_Load)
+        self.tfidf_model = load_gensim_tfidf_model(tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer, lazy_Load)
         self.model=None
     
     
@@ -246,7 +242,7 @@ class GensimTopicSumModel(object):
         return cossim(self.get_topics(doc1), self.get_topics(doc2))
 
 class GensimLDAModel(GensimTopicSumModel):
-    def __init__(self, lda_fileloc, tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer=lambda x: x.split(), cache=True, lazy_load=True):
+    def __init__(self, lda_fileloc, tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer=lambda x: x.split(), lazy_load=True):
         """
             Initialize options for a Gensim LDA model
             
@@ -260,12 +256,10 @@ class GensimLDAModel(GensimTopicSumModel):
             :type tfidf_model_loc: str
             :param tokenizer: the document tokenization function. Must take a single str argument and return a list of strs
             :type tokenizer: Callable[[str], List[str]]
-            :param cache: specifies whether doc summary results should be cached
-            :type cache: bool
             :param lazy_load: specifies whether the model should be lazy_loaded
             :type lazy_load: bool
         """
-        super(GensimLDAModel, self).__init__(tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer, cache, lazy_load)
+        super(GensimLDAModel, self).__init__(tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer, lazy_load)
         
         self.lda_fileloc = lda_fileloc
         if not lazy_load:
@@ -283,7 +277,7 @@ class GensimLDAModel(GensimTopicSumModel):
         return self.model
 
 class GensimLSIModel(GensimTopicSumModel):
-    def __init__(self, lsi_fileloc, tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer=lambda x: x.split(), cache=True, lazy_load=True):
+    def __init__(self, lsi_fileloc, tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer=lambda x: x.split(), lazy_load=True):
         """
             Initialize options for a Gensim LSI model
             
@@ -297,12 +291,10 @@ class GensimLSIModel(GensimTopicSumModel):
             :type tfidf_model_loc: str
             :param tokenizer: the document tokenization function. Must take a single str argument and return a list of strs
             :type tokenizer: Callable[[str], List[str]]
-            :param cache: specifies whether doc summary results should be cached
-            :type cache: bool
             :param lazy_load: specifies whether the model should be lazy_loaded
             :type lazy_load: bool
         """
-        super(GensimLSIModel, self).__init__(tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer, cache, lazy_load)
+        super(GensimLSIModel, self).__init__(tfidf_model_name, word_ids_loc, tfidf_model_loc, tokenizer, lazy_load)
         
         self.lsi_fileloc = lsi_fileloc
         if not lazy_load:

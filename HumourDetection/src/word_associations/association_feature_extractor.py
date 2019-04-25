@@ -23,6 +23,13 @@ _underscore_pat = re.compile("_")
 _space_pat = re.compile(" ")
 
 #Word embedding features
+EMBEDDING_W2V = "Word2Vec"
+EMBEDDING_GLOVE = "Glove"
+EMBEDDING_W2G_COS = "Word2Gauss Cosine"
+EMBEDDING_W2G_KL = "Word2Gauss KL"
+FEAT_EMBEDDING_SIM = "Word Embedding Similarity"
+FEAT_EMBEDDING_OFFSET = "Word Embedding Offset"
+FEAT_EMBEDDING_VECTORS = "Word Embedding Vectors"
 FEAT_W2V_SIM = "Word2Vec Similarity"
 FEAT_W2V_OFFSET = "Word2Vec Offset"
 FEAT_W2V_VECTORS = "Full Word2Vec Vectors"
@@ -238,6 +245,11 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
     def _underscore_to_space(self, word):
         return _underscore_pat.sub(" ",word)
     
+    def _initialize_feature_vects(self,labels):
+        return {label:[] for label in labels if label in self.features}
+    def _convert_feats_to_numpy(self, feature_vects):
+        return {feat : np.vstack(vect) for feat, vect in feature_vects.items()}
+    
     def fit(self,X, y=None):
         return self
     
@@ -251,23 +263,19 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
             :returns: A matrix representing the calculated LDA similarities
             :rtype: numpy.array
         """
-        feature_vects = []
-        if FEAT_LDA_SIM in self.features:
+        feature_vects = self._initialize_feature_vects([FEAT_LDA_SIM])
+        if feature_vects:
             #Only load LDA model if we care about LDA features
-            
             for stimuli, response in stimuli_response:
                 lda_sim = self._get_lda_model().get_similarity(stimuli, response)
                 lda_sim = 0.0 if np.isnan(lda_sim) else lda_sim
                 
-                feature_vects.append(lda_sim)
+                feature_vects[FEAT_LDA_SIM].append(lda_sim)
                 
             if self.low_memory:
                 self._get_lda_model()._purge_model()
         
-        else:
-            feature_vects = [[]] * len(stimuli_response) #default to empty feature set
-        
-        return np.vstack(feature_vects)
+        return {feat : np.vstack(vect) for feat, vect in feature_vects.items()}
     
     def get_w2v_feats(self,stimuli_response):
         """
@@ -280,37 +288,30 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
             :returns: A matrix representing the extracted Word2Vec features
             :rtype: numpy.array
         """
-        feature_vects=[]
+        feature_vects=self._initialize_feature_vects([FEAT_W2V_SIM, FEAT_W2V_OFFSET, FEAT_W2V_VECTORS])
         full_vects_needed = (FEAT_W2V_OFFSET in self.features) or (FEAT_W2V_VECTORS in self.features)
-        if (FEAT_W2V_SIM in self.features) or full_vects_needed:
+        if feature_vects:
             #Only load Word2Vec model if we care about Word2Vec features
             
             for stimuli, response in stimuli_response:
-                feature_vect = []
                 santized_stimuli = self._space_to_underscore(stimuli)
                 santized_response = self._space_to_underscore(response)
                 
                 if FEAT_W2V_SIM in self.features:
-                    feature_vect.append(self._get_w2v_model().get_similarity(santized_stimuli, santized_response))
+                    feature_vects[FEAT_W2V_SIM].append(self._get_w2v_model().get_similarity(santized_stimuli, santized_response))
                 
                 if full_vects_needed:
                     stim_vector = self._get_w2v_model().get_vector(santized_stimuli)
                     resp_vector = self._get_w2v_model().get_vector(santized_response)
                     if FEAT_W2V_OFFSET in self.features:
-                        feature_vect.append(stim_vector - resp_vector)
+                        feature_vects[FEAT_W2V_OFFSET].append(stim_vector - resp_vector)
                     if FEAT_W2V_VECTORS in self.features:
-                        feature_vect.append(stim_vector)
-                        feature_vect.append(resp_vector)
+                        feature_vects[FEAT_W2V_VECTORS].append(np.hstack([stim_vector, resp_vector]))
                     
-                feature_vects.append(np.hstack(feature_vect))
-                
             if self.low_memory:
                 self._get_w2v_model()._purge_model()
                 
-        else:
-            feature_vects = [[]] * len(stimuli_response) #default to empty feature set
-        
-        return np.vstack(feature_vects)
+        return self._convert_feats_to_numpy(feature_vects)
     
     def get_glove_feats(self,stimuli_response):
         """
@@ -323,37 +324,30 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
             :returns: A matrix representing the extracted GloVe features
             :rtype: numpy.array
         """
-        feature_vects=[]
+        feature_vects=self._initialize_feature_vects([FEAT_GLOVE_SIM, FEAT_GLOVE_OFFSET, FEAT_GLOVE_VECTORS])
         full_vects_needed = (FEAT_GLOVE_OFFSET in self.features) or (FEAT_GLOVE_VECTORS in self.features)
-        if (FEAT_GLOVE_SIM in self.features) or full_vects_needed:
+        if feature_vects:
             #Only load GloVe model if we care about GloVe features
             
             for stimuli, response in stimuli_response:
-                feature_vect = []
                 santized_stimuli = self._space_to_underscore(stimuli)
                 santized_response = self._space_to_underscore(response)
                 
                 if FEAT_GLOVE_SIM in self.features:
-                    feature_vect.append(self._get_glove_model().get_similarity(santized_stimuli, santized_response))
+                    feature_vects[FEAT_GLOVE_SIM].append(self._get_glove_model().get_similarity(santized_stimuli, santized_response))
                 
                 if full_vects_needed:
                     stim_vector = self._get_glove_model().get_vector(santized_stimuli)
                     resp_vector = self._get_glove_model().get_vector(santized_response)
                     if FEAT_GLOVE_OFFSET in self.features:
-                        feature_vect.append(stim_vector - resp_vector)
+                        feature_vects[FEAT_GLOVE_OFFSET].append(stim_vector - resp_vector)
                     if FEAT_GLOVE_VECTORS in self.features:
-                        feature_vect.append(stim_vector)
-                        feature_vect.append(resp_vector)
+                        feature_vects[FEAT_GLOVE_VECTORS].append(np.hstack([stim_vector, resp_vector]))
                     
-                feature_vects.append(np.hstack(feature_vect))
-                
             if self.low_memory:
                 self._get_glove_model()._purge_model()
-                  
-        else:
-            feature_vects = [[]] * len(stimuli_response) #default to empty feature set
-        
-        return np.vstack(feature_vects)
+                
+        return self._convert_feats_to_numpy(feature_vects)
     
     def get_autoex_feats(self,stimuli_response_synset_names):
         """
@@ -365,15 +359,13 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
             :returns: A matrix representing the extracted AutoExtend features
             :rtype: numpy.array
         """
-        feature_vects=[]
-        if (FEAT_MAX_AUTOEX_SIM in self.features) or (FEAT_AVG_AUTOEX_SIM in self.features):
+        feature_vects=self._initialize_feature_vects([FEAT_MAX_AUTOEX_SIM, FEAT_AVG_AUTOEX_SIM])
+        if feature_vects:
             #Only load AutoExtend model if we care about AutoExtend features
             
             total = len(stimuli_response_synset_names)
             processed = 0
             for stimuli_synset_names, response_synset_names in stimuli_response_synset_names:
-                feature_vect = []
-                
                 synset_sims = [ self._get_autoex_model().get_similarity(s, r) for s in stimuli_synset_names for r in response_synset_names]
 #                 for stimuli_synset in stimuli_synsets:
 #                     for response_synset in response_synsets:
@@ -385,23 +377,18 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
                     synset_sims = [0.0]
                 
                 if FEAT_MAX_AUTOEX_SIM in self.features:
-                    feature_vect.append(max(synset_sims))
+                    feature_vects[FEAT_MAX_AUTOEX_SIM].append(max(synset_sims))
                 if FEAT_AVG_AUTOEX_SIM in self.features:
-                    feature_vect.append(mean(synset_sims))
+                    feature_vects[FEAT_AVG_AUTOEX_SIM].append(mean(synset_sims))
                     
-                feature_vects.append(feature_vect)
-                
                 processed += 1
                 if not (processed % self.verbose_interval):
                     self.logger.debug("{}/{} done".format(processed, total))
                 
             if self.low_memory:
                 self._get_autoex_model()._purge_model()
-                        
-        else:
-            feature_vects = [[]] * len(stimuli_response_synset_names) #default to empty feature set
         
-        return np.vstack(feature_vects)
+        return self._convert_feats_to_numpy(feature_vects)
     
     def get_wn_betweenness(self,stimuli_response_synset_names):
         """
@@ -413,15 +400,13 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
             :returns: A matrix representing the extracted WordNet betweenness centralities
             :rtype: numpy.array
         """
-        feature_vects = []
-        if FEAT_MAX_BETWEENNESS in self.features or FEAT_AVG_BETWEENNESS in self.features or FEAT_TOTAL_BETWEENNESS in self.features:
+        feature_vects = self._initialize_feature_vects([FEAT_MAX_BETWEENNESS, FEAT_AVG_BETWEENNESS, FEAT_TOTAL_BETWEENNESS])
+        if feature_vects:
             #Only load betweenness if we care about betweenness features
             with open(self.betweenness_loc, "rb") as betweeneness_pkl:
                 betweenness = pickle.load(betweeneness_pkl)
             
             for stimuli_synset_names, response_synset_names in stimuli_response_synset_names:
-                feature_vect = []
-                
                 stimuli_betweennesses = [betweenness.get(stimuli_synset_name,0.0) for stimuli_synset_name in stimuli_synset_names]
 #                 for stimuli_synset_name in stimuli_synset_names:
 #                     stimuli_betweennesses.append(betweenness.get(stimuli_synset_name,0.0))
@@ -437,21 +422,13 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
                     response_betweennesses.append(0.0)
                 
                 if FEAT_MAX_BETWEENNESS in self.features:
-                    feature_vect.append(max(stimuli_betweennesses))
-                    feature_vect.append(max(response_betweennesses))
+                    feature_vects[FEAT_MAX_BETWEENNESS].append(np.hstack([max(stimuli_betweennesses),max(response_betweennesses)]))
                 if FEAT_TOTAL_BETWEENNESS in  self.features:
-                    feature_vect.append(sum(stimuli_betweennesses))
-                    feature_vect.append(sum(response_betweennesses))
+                    feature_vects[FEAT_TOTAL_BETWEENNESS].append(np.hstack([sum(stimuli_betweennesses),sum(response_betweennesses)]))
                 if FEAT_AVG_BETWEENNESS in self.features:
-                    feature_vect.append(mean(stimuli_betweennesses))
-                    feature_vect.append(mean(response_betweennesses))
-                
-                feature_vects.append(feature_vect)
-            
-        else:
-            feature_vects = [[]] * len(stimuli_response_synset_names) #default to empty feature set
-        
-        return np.vstack(feature_vects)
+                    feature_vects[FEAT_AVG_BETWEENNESS].append(np.hstack([mean(stimuli_betweennesses), mean(response_betweennesses)]))
+                    
+        return self._convert_feats_to_numpy(feature_vects)
     
     def get_wn_load(self,stimuli_response_synset_names):
         """
@@ -463,15 +440,13 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
             :returns: A matrix representing the extracted WordNet load centralities
             :rtype: numpy.array
         """
-        feature_vects = []
-        if FEAT_MAX_LOAD in self.features or FEAT_AVG_LOAD in self.features or FEAT_TOTAL_LOAD in self.features:
+        feature_vects = self._initialize_feature_vects([FEAT_MAX_LOAD, FEAT_AVG_LOAD, FEAT_TOTAL_LOAD])
+        if feature_vects:
                 #Only load load if we care about load features and we have a location
                 with open(self.load_loc, "rb") as load_pkl:
                     load = pickle.load(load_pkl)
                 
                 for stimuli_synset_names, response_synset_names in stimuli_response_synset_names:
-                    feature_vect = []
-                    
                     stimuli_loads = [load.get(stimuli_synset_name,0.0) for stimuli_synset_name in stimuli_synset_names]
 #                     for stimuli_synset_name in stimuli_synset_names:
 #                         stimuli_loads.append(load.get(stimuli_synset_name,0.0))
@@ -487,21 +462,13 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
                         response_loads.append(0.0)
                     
                     if FEAT_MAX_LOAD in self.features:
-                        feature_vect.append(max(stimuli_loads))
-                        feature_vect.append(max(response_loads))
+                        feature_vects[FEAT_MAX_LOAD].append(np.hstack([max(stimuli_loads),max(response_loads)]))
                     if FEAT_TOTAL_LOAD in  self.features:
-                        feature_vect.append(sum(stimuli_loads))
-                        feature_vect.append(sum(response_loads))
+                        feature_vects[FEAT_TOTAL_LOAD].append(np.hstack([sum(stimuli_loads),sum(response_loads)]))
                     if FEAT_AVG_LOAD in self.features:
-                        feature_vect.append(mean(stimuli_loads))
-                        feature_vect.append(mean(response_loads))
-                    
-                    feature_vects.append(feature_vect)
-                    
-        else:
-            feature_vects = [[]] * len(stimuli_response_synset_names) #default to empty feature set
+                        feature_vects[FEAT_AVG_LOAD].append(np.hstack([mean(stimuli_loads),mean(response_loads)]))
         
-        return np.vstack(feature_vects)
+        return self._convert_feats_to_numpy(feature_vects)
     
     def get_dir_rel(self,stimuli_response_synset_names):
         """ 
@@ -518,23 +485,18 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
             :returns: A matrix representing the extracted WordNet betweenness centralities
             :rtype: numpy.array
         """
-        feature_vects = []
-        if FEAT_DIR_REL in self.features:
+        feature_vects = self._initialize_feature_vects([FEAT_DIR_REL])
+        if feature_vects:
             wn_graph = WordNetGraph()
             
-            i=0 #TODO: Remove
             for stimuli_names, response_names in stimuli_response_synset_names:
 #                 stimuli_names = [s.name() for s in stimuli_synsets]
 #                 response_names = [s.name() for s in response_synsets]
                 
                 dirrel = wn_graph.get_directional_relativity(stimuli_names,response_names)
-                feature_vects.append(dirrel)
-                i+=1 #TODO: Remove
+                feature_vects[FEAT_DIR_REL].append(dirrel)
         
-        else:
-            feature_vects = [[]] * len(stimuli_response_synset_names) #default to empty feature set
-        
-        return np.vstack(feature_vects)
+        return self._convert_feats_to_numpy(feature_vects)
     
     def get_w2g_feats(self,stimuli_response):
         """
@@ -547,37 +509,29 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
             :returns: A matrix representing the extracted Word2Gauss features
             :rtype: numpy.array
         """
-        feature_vects=[]
-        if (FEAT_W2G_SIM in self.features) or (FEAT_W2G_ENERGY in self.features) or (FEAT_W2G_OFFSET in self.features) or (FEAT_W2G_VECTORS in self.features):
+        feature_vects=self._initialize_feature_vects([FEAT_W2G_SIM,FEAT_W2G_ENERGY,FEAT_W2G_OFFSET,FEAT_W2G_VECTORS])
+        if feature_vects:
             #Only load Word2Gauss if we care about Word2Gauss features
             
             for stimuli, response in stimuli_response:
-                feature_vect = []
-                
                 #treat stimuli/response a document and let the vocab tokenize it. This way we can capture higher order ngrams
                 stimuli_as_doc = self._underscore_to_space(stimuli)
                 response_as_doc = self._underscore_to_space(response)
                 
                 if FEAT_W2G_SIM in self.features:
-                    feature_vect.append(self._get_w2g_model().get_similarity(stimuli_as_doc, response_as_doc))
+                    feature_vects[FEAT_W2G_SIM].append(self._get_w2g_model().get_similarity(stimuli_as_doc, response_as_doc))
                 if FEAT_W2G_OFFSET in self.features:
-                    feature_vect.append(self._get_w2g_model().get_offset(stimuli_as_doc, response_as_doc))
+                    feature_vects[FEAT_W2G_OFFSET].append(self._get_w2g_model().get_offset(stimuli_as_doc, response_as_doc))
                 if FEAT_W2G_VECTORS in self.features:
-                    feature_vect.append(self._get_w2g_model().get_vector(stimuli_as_doc))
-                    feature_vect.append(self._get_w2g_model().get_vector(response_as_doc))
+                    feature_vects[FEAT_W2G_VECTORS].append(np.hstack([self._get_w2g_model().get_vector(stimuli_as_doc), self._get_w2g_model().get_vector(response_as_doc)]))
                 if FEAT_W2G_ENERGY in self.features:
                     #assume stimuli/response are a valid ngrams
-                    feature_vect.append(self._get_w2g_model().get_energy(self._space_to_underscore(stimuli), self._space_to_underscore(response)))
-                
-                feature_vects.append(np.hstack(feature_vect))
+                    feature_vects[FEAT_W2G_ENERGY].append(self._get_w2g_model().get_energy(self._space_to_underscore(stimuli), self._space_to_underscore(response)))
                 
             if self.low_memory:
                 self._get_w2g_model()._purge_model()
-         
-        else:
-            feature_vects = [[]] * len(stimuli_response) #default to empty feature set
         
-        return np.vstack(feature_vects)
+        return self._convert_feats_to_numpy(feature_vects)
     
     def get_wn_feats(self,stimuli_response_synsets):
         """
@@ -591,7 +545,7 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
             :returns: A matrix representing the extracted WordNet features
             :rtype: numpy.array
         """
-        feature_vects=[]
+        feature_vects=self._initialize_feature_vects([FEAT_MAX_WUP_SIM,FEAT_AVG_WUP_SIM,FEAT_MAX_PATH_SIM,FEAT_AVG_PATH_SIM,FEAT_MAX_LCH_SIM,FEAT_AVG_LCH_SIM,FEAT_LEXVECTORS])
         
         #determine which features we need to extract
         wup_needed = (FEAT_MAX_WUP_SIM in self.features) or (FEAT_AVG_WUP_SIM in self.features)
@@ -599,15 +553,12 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
         lch_needed = (FEAT_MAX_LCH_SIM in self.features) or (FEAT_AVG_LCH_SIM in self.features) 
         lexvector_needed = FEAT_LEXVECTORS in self.features
         
-        if wup_needed or path_needed or lch_needed or lexvector_needed:
+        if feature_vects:
             total = len(stimuli_response_synsets)
             processed = 0
             for stimuli_synsets, response_synsets in stimuli_response_synsets:
-                feature_vect = []
-                
                 if lexvector_needed:
-                    feature_vect.append(get_lex_vector(stimuli_synsets))
-                    feature_vect.append(get_lex_vector(response_synsets))
+                    feature_vects[FEAT_LEXVECTORS].append(np.hstack([get_lex_vector(stimuli_synsets), get_lex_vector(response_synsets)]))
                 
                 wup_sims = []
                 path_sims = []
@@ -630,28 +581,23 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
                     lch_sims = [0.0]
                 
                 if FEAT_MAX_WUP_SIM in self.features:
-                    feature_vect.append(max(wup_sims))
+                    feature_vects[FEAT_MAX_WUP_SIM].append(max(wup_sims))
                 if FEAT_AVG_WUP_SIM in self.features:
-                    feature_vect.append(mean(wup_sims))
+                    feature_vects[FEAT_AVG_WUP_SIM].append(mean(wup_sims))
                 if FEAT_MAX_PATH_SIM in self.features:
-                    feature_vect.append(max(path_sims))
+                    feature_vects[FEAT_MAX_PATH_SIM].append(max(path_sims))
                 if FEAT_AVG_PATH_SIM in self.features:
-                    feature_vect.append(mean(path_sims))
+                    feature_vects[FEAT_AVG_PATH_SIM].append(mean(path_sims))
                 if FEAT_MAX_LCH_SIM in self.features:
-                    feature_vect.append(max(lch_sims))
+                    feature_vects[FEAT_MAX_LCH_SIM].append(max(lch_sims))
                 if FEAT_AVG_LCH_SIM in self.features:
-                    feature_vect.append(mean(lch_sims))
-                
-                feature_vects.append(np.hstack(feature_vect))
+                    feature_vects[FEAT_AVG_LCH_SIM].append(mean(lch_sims))
                 
                 processed+=1
                 if not (processed % self.verbose_interval):
                     self.logger.debug("{}/{} done".format(processed, total))
         
-        else:
-            feature_vects = [[]] * len(stimuli_response_synsets) #default to empty feature set
-        
-        return np.vstack(feature_vects)
+        return self._convert_feats_to_numpy(feature_vects)
     
     def get_extended_lesk_feats(self, stimuli_response_synsets):
         """
@@ -666,10 +612,9 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
             :returns: A matrix representing the extracted Extended Lesk relatedness
             :rtype: numpy.array
         """
-        feature_vects = []
-        
-        if FEAT_LESK in self.features:
-            el = ExtendedLesk(self.lesk_relations, cache=True) #doesn't matter if we cache since it'll be garbage collected when we're done
+        feature_vects = self._initialize_feature_vects([FEAT_LESK])
+        if feature_vects:
+            el = ExtendedLesk(self.lesk_relations)
             
             total = len(stimuli_response_synsets)
             processed = 0
@@ -677,18 +622,15 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
                 #don't need to sanitize stimuli and response since I'm looking them up in wordnet anyway
                 extended_lesk = el.getSynsetRelatedness(stimuli_synsets, response_synsets)
                 
-                feature_vects.append(extended_lesk)
+                feature_vects[FEAT_LESK].append(extended_lesk)
                 
                 processed += 1
                 if not (processed % self.verbose_interval):
                     self.logger.debug("{}/{} done".format(processed, total))
         
-        else:
-            feature_vects = [[]] * len(stimuli_response_synsets)
-        
-        return np.vstack(feature_vects)
+        return self._convert_feats_to_numpy(feature_vects)
     
-    def transform(self, stimuli_response):
+    def extract_features(self, stimuli_response):
         """
             Extract Association Strength features
             
@@ -698,26 +640,15 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
             :returns: A numpy array representing the extracted features
             :rtype: numpy.array
         """
-        
-        feature_vects = []
+        feature_vects = {}
         
         stimuli_response = [(stimuli.lower(), response.lower()) for stimuli, response in stimuli_response]
         
-        self.logger.debug("starting lda")
-        feature_vects.append(self.get_lda_feats(stimuli_response))
-        self.logger.debug("lda done")
-          
-        self.logger.debug("starting w2v")
-        feature_vects.append(self.get_w2v_feats(stimuli_response))
-        self.logger.debug("w2v done")
-          
-        self.logger.debug("starting glove")
-        feature_vects.append(self.get_glove_feats(stimuli_response))
-        self.logger.debug("glove done")
-         
-        self.logger.debug("starting w2g")
-        feature_vects.append(self.get_w2g_feats(stimuli_response))
-        self.logger.debug("w2g done")
+        #raw word features
+        for name, func in [("lda", self.get_lda_feats), ("w2v", self.get_w2v_feats), ("glove", self.get_glove_feats), ("w2g", self.get_w2g_feats)]:
+            self.logger.debug(f"starting {name}")
+            feature_vects.update(func(stimuli_response))
+            self.logger.debug(f"{name} done")
         
 
         
@@ -725,38 +656,32 @@ class AssociationFeatureExtractor(TransformerMixin, LoggerMixin):
         #TODO: use a Dict? to reduce the number of wordnet.synsets calls further?
         stimuli_response_synsets = [(self._get_synsets(stimuli), self._get_synsets(response)) for stimuli, response in stimuli_response]
         
-        self.logger.debug("starting wordnet feats")
-        feature_vects.append(self.get_wn_feats(stimuli_response_synsets))
-        self.logger.debug("wordnet feats done")
-          
-        self.logger.debug("starting extended lesk")
-        feature_vects.append(self.get_extended_lesk_feats(stimuli_response_synsets))
-        self.logger.debug("extended lesk done")
-       
+        for name, func in [("wordnet feats", self.get_wn_feats), ("extended lesk", self.get_extended_lesk_feats)]:
+            self.logger.debug(f"starting {name}")
+            feature_vects.update(func(stimuli_response_synsets))
+            self.logger.debug(f"{name} done")
        
         #prefetch the names
         stimuli_response_synset_names = [([s.name() for s in stimuli_syns], [r.name() for r in response_syns]) for stimuli_syns, response_syns in stimuli_response_synsets]
-          
-        self.logger.debug("starting autoex")
-        feature_vects.append(self.get_autoex_feats(stimuli_response_synset_names))
-        self.logger.debug("autoex done")
-           
-        self.logger.debug("starting betweenness")
-        feature_vects.append(self.get_wn_betweenness(stimuli_response_synset_names))
-        self.logger.debug("betweenness done")
-          
-        self.logger.debug("starting load")
-        feature_vects.append(self.get_wn_load(stimuli_response_synset_names))
-        self.logger.debug("load done")
         
-        self.logger.debug("starting dirrels")
-        feature_vects.append(self.get_dir_rel(stimuli_response_synset_names))
-        self.logger.debug("dirrels done")
+        for name, func in [("autoex", self.get_autoex_feats), ("betweenness", self.get_wn_betweenness), ("load", self.get_wn_load), ("dirrel", self.get_dir_rel)]:
+            self.logger.debug(f"starting {name}")
+            feature_vects.update(func(stimuli_response_synset_names))
+            self.logger.debug(f"{name} done")
         
-        
-        feature_matrix = np.hstack(feature_vects)
         #failsafe to ensure make sure there's no nan or inf that would hurt training
-        #np.nan_to_num won't work because the in/-inf values still hurt training
-        feature_matrix[np.logical_not(np.isfinite(feature_matrix))] = 0
+        for feat in feature_vects.values():
+            #np.nan_to_num won't work because the in/-inf values still hurt training
+            feat[np.logical_not(np.isfinite(feat))] = 0
         
-        return feature_matrix
+        return feature_vects
+        
+    def transform(self, stimuli_response):
+        feature_vects = self.extract_features(stimuli_response)
+
+        #enforce cinsistent word order
+        sorted_keys = sorted(self.features)
+        feature_vects = [feature_vects[key] for key in sorted_keys]
+        
+        return np.hstack(feature_vects)
+    

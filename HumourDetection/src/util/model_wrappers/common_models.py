@@ -20,6 +20,12 @@ def get_stanford_glove(lazy_load=True):
 def get_google_autoextend(lazy_load=True):
     return load_gensim_vector_model("AutoExtend synset vectors", "c:/vectors/autoextend.word2vecformat.bin", lazy_load=lazy_load)
 
+def get_conceptnet_numberbatch(lazy_load=True):
+    return load_gensim_vector_model("ConceptNet Numberbatch", "c:/vectors/numberbatch.bin", lazy_load=lazy_load)
+
+def get_en_conceptnet_numberbatch(lazy_load=True):
+    return load_gensim_vector_model("English ConceptNet Numberbatch", "c:/vectors/numberbatch-en.bin", lazy_load=lazy_load)
+
 
 
 
@@ -41,3 +47,7 @@ def get_wikipedia_lda(lazy_load=True):
 
 def get_wikipedia_lsi(lazy_load=True):
     return load_gensim_topicsum_model("Wikipedia LSI", TYPE_LSI, "c:/vectors/lda_prep_no_lemma/no_lemma.lsi", *_WIKIPEDIA_TFIDF, lazy_load=lazy_load)
+
+_WIKIPEDIA_20180701_TFIDF = ("Wikipedia 2018/07/01 TFIDF Model", "c:/vectors/enwiki-20180701/enwiki-20180701_wordids.txt.bz2", "c:/vectors/enwiki-20180701/enwiki-20180701.tfidf_model")
+def get_wikipedia_20180701_lda(lazy_load=True):
+    return load_gensim_topicsum_model("Wikipedia 2018/07/01 LDA", TYPE_LDA, "c:/vectors/enwiki-20180701/enwiki-20180701.lda", *_WIKIPEDIA_TFIDF, lazy_load=lazy_load)

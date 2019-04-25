@@ -19,7 +19,7 @@ _models =  {} #holds models in form {model_name:GensimTfidfModel}
 #By using a module-level variables, we can easily share singleton-like instances across various other modules
 #See https://stackoverflow.com/questions/31875/is-there-a-simple-elegant-way-to-define-singletons
 
-def load_gensim_tfidf_model(model_name, word_ids_loc, tfidf_model_loc, tokenizer=lambda x: x.split(), cache=True, lazy_load=True):
+def load_gensim_tfidf_model(model_name, word_ids_loc, tfidf_model_loc, tokenizer=lambda x: x.split(), lazy_load=True):
     """
         Loads Gensim document summarization model disk from and stores it as
         a singleton-like instance.
@@ -44,7 +44,7 @@ def load_gensim_tfidf_model(model_name, word_ids_loc, tfidf_model_loc, tokenizer
     if model_name in _models:
         logging.info("'{}' already loaded. Will use existing instance.".format(model_name))
     else:
-        _models[model_name] = GensimTFIDFModel(word_ids_loc, tfidf_model_loc, tokenizer, cache, lazy_load)
+        _models[model_name] = GensimTFIDFModel(word_ids_loc, tfidf_model_loc, tokenizer, lazy_load)
         
     return _models[model_name]
 
