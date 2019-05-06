@@ -112,9 +112,9 @@ def read_semeval_2017_task_6_data(semeval_data_root_dir, training_dirs=["trial_d
         training_dirs = [training_dirs]
     
     for train_dir in training_dirs:
-        training_data.update(read_semeval_directory(train_dir, remove_midnight, remove_hashtag, tokenize_hashtag))
+        training_data.update(read_semeval_directory(os.path.join(semeval_data_root_dir, train_dir), remove_midnight, remove_hashtag, tokenize_hashtag))
     
-    evaluation_data = read_semeval_directory(evaluation_dir, remove_midnight, remove_hashtag, tokenize_hashtag)
+    evaluation_data = read_semeval_directory(os.path.join(semeval_data_root_dir, evaluation_dir), remove_midnight, remove_hashtag, tokenize_hashtag)
     
     output = (training_data, evaluation_data) #default to only training and evaluation data
     

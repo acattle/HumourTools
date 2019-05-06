@@ -1,7 +1,7 @@
 import numpy as np
 from tensorly.decomposition import parafac
 
-def decompose_tensors(documents, win_size=5, cp_rank=10):
+def decompose_tensors(documents, win_size=5, cp_rank=10, binary_counts=True):
     """
     Method for computing tensor decompositions based on https://www.cs.ucr.edu/~epapalex/papers/asonam18-fakenews.pdf
     
@@ -11,6 +11,8 @@ def decompose_tensors(documents, win_size=5, cp_rank=10):
     :type win_size: int
     :param cp_rank:
     :type cp_rank: int
+    :param binary_counts: Specifies whether cooccurance counts should be binary
+    :type binary_counts: bool
     """
     vocab = set()
     cooccurance_dicts = []
@@ -31,11 +33,18 @@ def decompose_tensors(documents, win_size=5, cp_rank=10):
                 
             #get the win_size words to the left of the target word...
             win_words = doc[max(0, i-win_size):i] #max() prevents negative indexes
-            #... and the win_size words to the right
-            win_words.extend(doc[min(i+1, doc_length):min(i+1+win_size, doc_length)]) #min() prevents out of bounds indexes
+            #because windows are symmetrical, we only need to look at one side of the window
+            #i.e. being in a word's window on the left means they're in our window on the right
             
             for win_word in win_words:
-                cooccurance_dict[word][win_word] = 1.0 #set binary cooccurance value to 1
+                if binary_counts:
+                    #set binary cooccurance value to 1
+                    cooccurance_dict[word][win_word] = 1.0
+                    cooccurance_dict[win_word][word] = 1.0
+                else:
+                    #increment the count by 1 (defaulting to 0 if the count is undefined)
+                    cooccurance_dict[word][win_word] = cooccurance_dict[word].get(win_word, 0) + 1
+                    cooccurance_dict[win_word][word] = cooccurance_dict[win_word].get(word, 0) + 1
         
         cooccurance_dicts.append(cooccurance_dict)
     
@@ -65,6 +74,8 @@ if __name__ == "__main__":
     from string import punctuation
     import re
     from scipy.spatial.distance import cdist
+    from gensim.models import KeyedVectors
+    from util.dataset_readers.semeval_2017_task_6_reader import read_semeval_2017_task_6_data
     
     punc = re.compile(f"[{punctuation}]+")
     midnight = re.compile("@midnight", flags=re.I)
@@ -83,7 +94,7 @@ if __name__ == "__main__":
 #     if not os.path.exists(experiment_dir_full_path):
 #         os.makedirs(experiment_dir_full_path)
      
-    prediction_dir = "D:/datasets/SemEval Data/predictions_5"
+    prediction_dir = "D:/datasets/SemEval Data/predictions_singlespace_evalonly"
     if not os.path.exists(prediction_dir):
         os.makedirs(prediction_dir)
 
@@ -94,36 +105,80 @@ if __name__ == "__main__":
 #         for f in glob.glob("*.tsv"):
 #             train_filenames.append(os.path.join(semeval_dir, d, tagged_dir,f))
     
-    test_filenames= []
-    os.chdir(os.path.join(semeval_dir, trial_dir))
-    for f in glob.glob("*.tsv"):
-        hashtag = re.compile(f"#{f[:-4].replace('_','')}", flags=re.I)
-#         test_filenames.append(os.path.join(semeval_dir, trial_dir,f))
-#         
+#     test_filenames= []
+#     os.chdir(os.path.join(semeval_dir, trial_dir))
+#     docs = {}
+#     all_texts=[]
+#     text_map={}
+#     for f in glob.glob("*.tsv"):
+# #         hashtag = re.compile(f"#{f[:-4].replace('_','')}", flags=re.I)
+#         hashtag = f[:-4].replace('_','')
+# #         test_filenames.append(os.path.join(semeval_dir, trial_dir,f))
+# #         
+# #     
+# #     for f in test_filenames:
+#         labels = []
+#         texts = []
+#         ids = []
+#         with codecs.open(f, "r", encoding="utf-8") as file:
+#             for line in file:
+#                 line = line.split("\t")
+#                 ids.append(line[0])
+#                 texts.append(midnight.sub("", hashtag.sub("", line[1])))
+#                 labels.append(int(line[2]))
 #     
-#     for f in test_filenames:
-        labels = []
-        texts = []
-        ids = []
-        with codecs.open(f, "r", encoding="utf-8") as file:
-            for line in file:
-                line = line.split("\t")
-                ids.append(line[0])
-                texts.append(midnight.sub("", hashtag.sub("", line[1])))
-                labels.append(int(line[2]))
+#         texts = [[word for word in word_tokenize(text) if not punc.fullmatch(word)] for text in texts]
+#         
+#         docs[hashtag]=(texts,labels,ids)
+#         all_texts.extend(texts)/
+#         text_map.update((text, i) for i, text in enumerate(texts, len(all_texts)))
+#         
+# #         decomp, vocab_map = decompose_tensors(texts, cp_rank=65)
+    semeval_data = read_semeval_2017_task_6_data(semeval_dir, remove_hashtag=False, tokenize_hashtag=True)
     
-        texts = [[word for word in word_tokenize(text) if not punc.fullmatch(word)] for text in texts]
+    eval_data = semeval_data[1]
+    
+    hashtag_indices={}
+    all_texts=[]
+    for hashtag, docs in eval_data.items():
+#     for data in semeval_data:
+#         for hashtag, docs in data.items():
+        ids, texts, labels = zip(*docs)
         
-        decomp, vocab_map = decompose_tensors(texts, cp_rank=5)
-        
+        start = len(all_texts)
+        end = start + len(texts)
+        hashtag_indices[hashtag]=(start,end)
+        all_texts.extend(texts)
+    
+    decomps, vocab_map = decompose_tensors(all_texts, cp_rank=50)
+    
+    for hashtag, docs in eval_data.items():
+        ids, texts, labels = zip(*docs)
+        start, end = hashtag_indices[hashtag]
+        decomp = decomps[start:end,:]
         center = np.mean(decomp, axis=0)
         distances=cdist(decomp, [center])
+        
+#         #w2v comparison
+#         from util.model_wrappers.common_models import get_google_word2vec, get_stanford_glove
+#         w2v = get_stanford_glove()
+#         zeros = np.zeros(w2v.get_dimensions())
+#         doc_embeddings = []
+#         for doc in texts:
+#             word_embeddings = [w2v.get_vector(word) for word in doc]
+# #             word_embeddings = [embedding for embedding in word_embeddings if not np.array_equal(embedding, zeros)]
+# #             if len(word_embeddings) == 0:
+# #                 word_embeddings = [zeros]
+#             doc_embeddings.append(sum(word_embeddings)/len(word_embeddings))
+#         doc_embeddings = np.array(doc_embeddings)
+#         center = np.mean(doc_embeddings, axis=0)
+#         distances=cdist(doc_embeddings, [center])
         
         ranked=sorted(list(zip(ids, labels, distances)), key= lambda x : x[2]) #sort from most central to least
         
         global_predictions = list(zip(*ranked))[0]
         
-        with open(os.path.join(prediction_dir,f"{f[:-4]}_PREDICT.tsv"), "w") as of:
+        with open(os.path.join(prediction_dir,f"{hashtag}_PREDICT.tsv"), "w") as of:
             of.write("\n".join(global_predictions))
     
         
