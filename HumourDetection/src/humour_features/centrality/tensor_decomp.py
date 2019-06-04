@@ -1,7 +1,7 @@
 import numpy as np
 from tensorly.decomposition import parafac
 
-def decompose_tensors(documents, win_size=5, cp_rank=10, binary_counts=True):
+def decompose_tensors(documents, win_size=5, cp_rank=10, binary_counts=True, tokenizer=str.split):
     """
     Method for computing tensor decompositions based on https://www.cs.ucr.edu/~epapalex/papers/asonam18-fakenews.pdf
     
@@ -13,6 +13,8 @@ def decompose_tensors(documents, win_size=5, cp_rank=10, binary_counts=True):
     :type cp_rank: int
     :param binary_counts: Specifies whether cooccurance counts should be binary
     :type binary_counts: bool
+    :param tokenizer: method for tokenizing documents. Default is str.split()
+    :type tokenizer: Callable[str, [List[str]]] 
     """
     vocab = set()
     cooccurance_dicts = []
@@ -21,8 +23,11 @@ def decompose_tensors(documents, win_size=5, cp_rank=10, binary_counts=True):
     #computer cooccurance matrices
     for doc in documents:
         cooccurance_dict = {}
+        
+        #tokenize do
+        doc=tokenizer(doc)
         doc_length = len(doc)
-
+        
         for i, word in enumerate(doc):
             vocab.add(word) #update the vocabulary
             
@@ -62,7 +67,7 @@ def decompose_tensors(documents, win_size=5, cp_rank=10, binary_counts=True):
     #perform CP_ALS decomposition
     decomp = parafac(tensor, cp_rank)
     
-    return decomp[0], vocab_map
+    return decomp[0], vocab_map #TODO: is vocab_map needed? It corresponds to the tensor, not decomp
 
 
 if __name__ == "__main__":
@@ -94,7 +99,7 @@ if __name__ == "__main__":
 #     if not os.path.exists(experiment_dir_full_path):
 #         os.makedirs(experiment_dir_full_path)
      
-    prediction_dir = "D:/datasets/SemEval Data/predictions_singlespace_evalonly"
+    prediction_dir = "D:/datasets/SemEval Data/predictions_50_test"
     if not os.path.exists(prediction_dir):
         os.makedirs(prediction_dir)
 
@@ -134,13 +139,13 @@ if __name__ == "__main__":
 #         text_map.update((text, i) for i, text in enumerate(texts, len(all_texts)))
 #         
 # #         decomp, vocab_map = decompose_tensors(texts, cp_rank=65)
-    semeval_data = read_semeval_2017_task_6_data(semeval_dir, remove_hashtag=False, tokenize_hashtag=True)
+    semeval_data = read_semeval_2017_task_6_data(semeval_dir, remove_hashtag=True, tokenize_hashtag=True)
     
     eval_data = semeval_data[1]
     
     hashtag_indices={}
-    all_texts=[]
     for hashtag, docs in eval_data.items():
+        all_texts=[]
 #     for data in semeval_data:
 #         for hashtag, docs in data.items():
         ids, texts, labels = zip(*docs)
@@ -150,12 +155,13 @@ if __name__ == "__main__":
         hashtag_indices[hashtag]=(start,end)
         all_texts.extend(texts)
     
-    decomps, vocab_map = decompose_tensors(all_texts, cp_rank=50)
+        decomps, vocab_map = decompose_tensors(all_texts, cp_rank=50, binary_counts=False)
     
-    for hashtag, docs in eval_data.items():
-        ids, texts, labels = zip(*docs)
-        start, end = hashtag_indices[hashtag]
-        decomp = decomps[start:end,:]
+#     for hashtag, docs in eval_data.items():
+#         ids, texts, labels = zip(*docs)
+#         start, end = hashtag_indices[hashtag]
+#         decomp = decomps[start:end,:]
+        decomp=decomps
         center = np.mean(decomp, axis=0)
         distances=cdist(decomp, [center])
         
